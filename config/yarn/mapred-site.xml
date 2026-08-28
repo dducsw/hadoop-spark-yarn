@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+
+  <!-- Execution Framework -->
+  <property>
+    <name>mapreduce.framework.name</name>
+    <value>yarn</value>
+  </property>
+
+  <!-- JobHistory Server Addresses -->
+  <property>
+    <name>mapreduce.jobhistory.address</name>
+    <value>jobhistory:10020</value>
+  </property>
+  <property>
+    <name>mapreduce.jobhistory.webapp.address</name>
+    <value>jobhistory:19888</value>
+  </property>
+  <property>
+    <name>mapreduce.jobhistory.intermediate-done-dir</name>
+    <value>/mr-history/done_intermediate</value>
+  </property>
+  <property>
+    <name>mapreduce.jobhistory.done-dir</name>
+    <value>/mr-history/done</value>
+  </property>
+
+  <!-- Container Memory Allocations -->
+  <property>
+    <name>mapreduce.map.memory.mb</name>
+    <value>1024</value>
+  </property>
+  <property>
+    <name>mapreduce.reduce.memory.mb</name>
+    <value>1024</value>
+  </property>
+  <property>
+    <name>mapreduce.map.java.opts</name>
+    <value>-Xmx800m</value>
+  </property>
+  <property>
+    <name>mapreduce.reduce.java.opts</name>
+    <value>-Xmx800m</value>
+  </property>
+
+  <!-- MapReduce Application Classpath -->
+  <property>
+    <name>mapreduce.application.classpath</name>
+    <value>
+      $HADOOP_MAPRED_HOME/share/hadoop/mapreduce/*,
+      $HADOOP_MAPRED_HOME/share/hadoop/mapreduce/lib/*
+    </value>
+  </property>
+
+</configuration>

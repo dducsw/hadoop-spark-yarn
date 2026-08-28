@@ -1,0 +1,171 @@
+networks:
+  bigdata-net:
+    name: bigdata-net
+    driver: bridge
+
+services:
+
+  # 1. ZooKeeper Coordinator
+  zookeeper:
+    image: zookeeper:3.8
+    container_name: zookeeper
+    hostname: zookeeper
+    networks: [bigdata-net]
+    environment:
+      ZOO_MY_ID: 1
+    ports:
+      - "2181:2181"
+    volumes:
+      - zk_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 512M
+    restart: unless-stopped
+
+  # 2. Hive Metastore Database (PostgreSQL 15)
+  hive-db:
+    image: postgres:15-alpine
+    container_name: hive-db
+    hostname: hive-db
+    networks: [bigdata-net]
+    environment:
+      POSTGRES_DB: metastore
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hivepassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - hive_db_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.3"
+          memory: 512M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hive -d metastore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 3. ClickHouse OLAP Engine
+  clickhouse:
+    image: clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-24.3-alpine}
+    container_name: clickhouse
+    hostname: clickhouse
+    networks: [bigdata-net]
+    environment:
+      CLICKHOUSE_DB: analytics
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse123
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"   # HTTP REST / Web Interface
+      - "9004:9000"   # Native TCP Protocol
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 1024M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 4. Master Node (HDFS NameNode, YARN RM, Hive Metastore, HiveServer2, Spark History)
+  master:
+    build:
+      context: .
+      dockerfile: docker/base/Dockerfile
+    container_name: master
+    hostname: master
+    networks: [bigdata-net]
+    ports:
+      - "9870:9870"   # HDFS NameNode Web UI
+      - "9000:9000"   # HDFS NameNode RPC
+      - "8088:8088"   # YARN ResourceManager Web UI
+      - "8032:8032"   # YARN RM ApplicationMaster RPC
+      - "19888:19888" # MapReduce JobHistory Web UI
+      - "18080:18080" # Spark History Server Web UI
+      - "10000:10000" # Hive JDBC/ODBC (Beeline/BI)
+      - "10002:10002" # HiveServer2 Web UI
+      - "9083:9083"   # Hive Metastore Thrift RPC
+      - "8888:8888"   # JupyterLab Web UI (PySpark on YARN)
+    depends_on:
+      zookeeper:
+        condition: service_started
+      hive-db:
+        condition: service_healthy
+    volumes:
+      - master_name_data:/hadoop/dfs/name
+      - ./scripts:/scripts
+      - ./data:/data
+      - ./jobs:/jobs
+      - ./notebooks:/notebooks
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 3584M
+    command: /scripts/bootstrap/start-master.sh
+    restart: unless-stopped
+
+  # 5. Worker 1 (HDFS DataNode + YARN NodeManager)
+  worker1:
+    build:
+      context: .
+      dockerfile: docker/base/Dockerfile
+    container_name: worker1
+    hostname: worker1
+    networks: [bigdata-net]
+    depends_on:
+      - master
+    volumes:
+      - worker1_dn_data:/hadoop/dfs/data
+      - ./scripts:/scripts
+      - ./data:/data
+      - ./jobs:/jobs
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 2250M
+    command: /scripts/bootstrap/start-worker.sh
+    restart: unless-stopped
+
+  # 6. Worker 2 (HDFS DataNode + YARN NodeManager)
+  worker2:
+    build:
+      context: .
+      dockerfile: docker/base/Dockerfile
+    container_name: worker2
+    hostname: worker2
+    networks: [bigdata-net]
+    depends_on:
+      - master
+    volumes:
+      - worker2_dn_data:/hadoop/dfs/data
+      - ./scripts:/scripts
+      - ./data:/data
+      - ./jobs:/jobs
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 2250M
+    command: /scripts/bootstrap/start-worker.sh
+    restart: unless-stopped
+
+volumes:
+  zk_data:
+  hive_db_data:
+  clickhouse_data:
+  master_name_data:
+  worker1_dn_data:
+  worker2_dn_data:

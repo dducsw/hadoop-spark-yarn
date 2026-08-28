@@ -1,0 +1,140 @@
+# On-premise Data Platform with Hadoop, Spark and YARN
+
+A local multi-container environment designed to simulate real-world on-premises enterprise Big Data architectures (commonly used in banking, telecommunications, and large enterprises that rely on Apache Hadoop as their core data platform).
+
+This project provides a practical sandbox for hands-on learning, architectural comprehension, and performance tuning across the full data lifecycle: **HDFS (Distributed Storage) ➔ YARN (Resource Management) ➔ Apache Spark (Distributed Compute) ➔ Apache Hive (Metastore) ➔ ClickHouse (OLAP Serving Layer)**.
+
+---
+
+## 1. Enterprise Architecture & Data Flow
+
+```mermaid
+flowchart TD
+    subgraph Ingestion["1. Ingestion Layer"]
+        A["Raw Data (CSV / JSON / Logs)"] -->|HDFS Put| B["HDFS Storage (/data/raw/)"]
+    end
+
+    subgraph Processing["2. Distributed Compute"]
+        B -->|Read| C["Apache Spark on YARN"]
+        C -->|Transform & Aggregate| D["Cleaned Data & Business KPIs"]
+    end
+
+    subgraph Storage["3. Data Warehouse & Catalog"]
+        D -->|Write Parquet| E["HDFS Warehouse (/user/hive/warehouse)"]
+        D -->|Manage Metadata| F["Hive Metastore (PostgreSQL Backend)"]
+    end
+
+    subgraph Serving["4. OLAP Serving Layer"]
+        D -->|JDBC Export| G["ClickHouse OLAP Server"]
+        G -->|Sub-second Queries| H["BI Tools & Dashboards"]
+    end
+```
+
+---
+
+## 2. Core Practice & Optimization Areas
+
+This lab is structured to practice standard performance tuning and operational scenarios encountered in production Hadoop/Spark environments:
+
+1. **HDFS Storage & Data Locality**:
+   - Understanding block sizing, replication policies, and NameNode namespace overhead.
+   - Managing and preventing the small files problem via compaction.
+2. **YARN Resource Management**:
+   - Allocating NodeManager memory (`yarn.nodemanager.resource.memory-mb`) and virtual cores.
+   - Managing containers, ApplicationMasters, and Capacity Scheduler queues.
+3. **Spark on YARN Performance Tuning**:
+   - Memory sizing: Driver vs. Executor heap and `spark.executor.memoryOverhead`.
+   - Shuffle tuning, Adaptive Query Execution (AQE), and data skew mitigation.
+   - Optimizing execution via partitioned columnar formats (Parquet with Snappy compression).
+4. **Hive Data Warehouse & Metastore Modeling**:
+   - Decoupled Metastore architecture backed by PostgreSQL.
+   - Managing external tables, schema evolution, and partition pruning.
+5. **Modern OLAP Serving (ClickHouse)**:
+   - Offloading high-concurrency analytical queries from the data lake to ClickHouse.
+   - Designing MergeTree primary keys and partition strategies for sub-second dashboard queries.
+
+---
+
+## 3. Cluster Components (6 Containers)
+
+| Container | Host Ports | Services & Responsibilities |
+| :--- | :--- | :--- |
+| **`master`** | `9870`, `8088`, `18080`, `19888`, `9083`, `9000` | HDFS NameNode, YARN ResourceManager, Hive Metastore, Spark History Server |
+| **`worker1`** | Internal | HDFS DataNode 1, YARN NodeManager 1 |
+| **`worker2`** | Internal | HDFS DataNode 2, YARN NodeManager 2 |
+| **`clickhouse`** | `8123` (HTTP), `9004` (Native TCP) | ClickHouse OLAP Server for real-time analytical queries |
+| **`hive-db`** | `5432` | PostgreSQL 15 RDBMS storing Hive Metastore schema |
+| **`zookeeper`** | `2181` | ZooKeeper 3.8 Cluster Coordinator |
+
+---
+
+## 4. Resource Allocation & Limits
+
+Configured with strict resource caps to prevent resource exhaustion on local development machines (WSL2 / Docker Desktop):
+
+- **Total RAM Limit**: ~9.89 GB (Idle footprint: ~2.5 GB)
+- **Total CPU Limit**: 6.0 cores max
+
+| Service | Memory Limit | CPU Limit |
+| :--- | :--- | :--- |
+| `master` | 3.5 GB | 2.0 |
+| `worker1` | 2.25 GB | 1.5 |
+| `worker2` | 2.25 GB | 1.5 |
+| `clickhouse` | 1.0 GB | 0.5 |
+| `hive-db` | 512 MB | 0.3 |
+| `zookeeper` | 512 MB | 0.2 |
+
+---
+
+## 5. Quick Start Guide
+
+### Step 1: Start the Cluster
+```bash
+make up
+# or: docker-compose up -d
+```
+*The master container automatically performs background bootstrap (initializing HDFS directories, uploading sample datasets, distributing Spark JARs, and creating ClickHouse schemas).*
+
+### Step 2: Check Cluster Health
+```bash
+make status
+```
+
+### Step 3: Run Verification Test Suite
+Executes a 5-layer verification suite covering HDFS, YARN MapReduce, PySpark on YARN, Hive table creation, and ClickHouse OLAP queries:
+```bash
+make test
+```
+
+### Step 4: Run End-to-End Enterprise Pipeline
+```bash
+docker exec master spark-submit --master yarn /jobs/spark_to_clickhouse_etl.py
+```
+
+### Step 5: Stop the Cluster
+```bash
+# Stop containers (preserves persistent volumes):
+make down
+
+# Stop and purge all data volumes:
+make clean
+```
+
+---
+
+## 6. Web Interfaces
+
+- **JupyterLab (Interactive PySpark)**: [http://localhost:8888/lab](http://localhost:8888/lab)
+- **HDFS NameNode**: [http://localhost:9870](http://localhost:9870)
+- **YARN ResourceManager**: [http://localhost:8088](http://localhost:8088)
+- **Spark History Server**: [http://localhost:18080](http://localhost:18080)
+- **MapReduce JobHistory**: [http://localhost:19888](http://localhost:19888)
+- **ClickHouse Web Client**: [http://localhost:8123/play](http://localhost:8123/play)
+
+---
+
+## 7. Additional Documentation
+
+- [Operations Runbook](docs/RUNBOOK.md)
+- [Architecture & Network Ports](docs/ARCHITECTURE.md)
+- [Troubleshooting & FAQ](docs/TROUBLESHOOTING.md)

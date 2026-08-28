@@ -1,0 +1,37 @@
+# Environment variables & secrets
+.env
+
+# Large binary tarball downloads
+docker/base/downloads/*.tar.gz
+docker/base/downloads/*.tgz
+docker/base/downloads/*.jar
+!docker/base/downloads/.gitkeep
+
+# Python & Jupyter
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Spark & Hive temporary / local output
+metastore_db/
+derby.log
+spark-warehouse/
+*.inprogress
+
+# Logs
+*.log
+logs/
+
+# IDE & Editor artifacts
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
