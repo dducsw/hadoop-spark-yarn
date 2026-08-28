@@ -6,29 +6,11 @@ This project provides a practical sandbox for hands-on learning, architectural c
 
 ---
 
-## 1. Enterprise Architecture & Data Flow
+## 1. Architecture
 
-```mermaid
-flowchart TD
-    subgraph Ingestion["1. Ingestion Layer"]
-        A["Raw Data (CSV / JSON / Logs)"] -->|HDFS Put| B["HDFS Storage (/data/raw/)"]
-    end
-
-    subgraph Processing["2. Distributed Compute"]
-        B -->|Read| C["Apache Spark on YARN"]
-        C -->|Transform & Aggregate| D["Cleaned Data & Business KPIs"]
-    end
-
-    subgraph Storage["3. Data Warehouse & Catalog"]
-        D -->|Write Parquet| E["HDFS Warehouse (/user/hive/warehouse)"]
-        D -->|Manage Metadata| F["Hive Metastore (PostgreSQL Backend)"]
-    end
-
-    subgraph Serving["4. OLAP Serving Layer"]
-        D -->|JDBC Export| G["ClickHouse OLAP Server"]
-        G -->|Sub-second Queries| H["BI Tools & Dashboards"]
-    end
-```
+<p align="center">
+  <img src="docs/images/architecture.png" alt="Architecture" />
+</p>
 
 ---
 
