@@ -14,8 +14,8 @@ from src.common.base_spark_job import BaseSparkJob
 
 class BaseCuratedJob(BaseSparkJob):
     def __init__(self, feature_name: str, stage_table_name: Optional[str] = None,
-                 stage_base_dir: str = "/stage/home_credit", curated_base_dir: str = "/curated/home_credit",
-                 stage_db: str = "stage_lakehouse", curated_db: str = "curated_lakehouse",
+                 stage_base_dir: str = "/stage/credit_risk", curated_base_dir: str = "/curated/credit_risk",
+                 stage_db: str = "stage_credit_risk", curated_db: str = "credit_risk",
                  primary_key: str = "SK_ID_CURR"):
         stage_table = stage_table_name or feature_name
         source_path = os.path.join(stage_base_dir, stage_table)

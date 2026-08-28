@@ -3,7 +3,7 @@ set -e
 
 TABLE=${1:-"all"}
 INPUT_DIR=${2:-"/data/home-credit-default-risk"}
-OUTPUT_DIR=${3:-"/raw/home_credit"}
+OUTPUT_DIR=${3:-"/raw/credit_risk"}
 
 echo "=== Ingesting Home Credit Risk Data to HDFS Raw Layer ==="
 echo "Target table : $TABLE"

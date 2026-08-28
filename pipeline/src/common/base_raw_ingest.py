@@ -15,7 +15,7 @@ from src.common.base_spark_job import BaseSparkJob
 class BaseRawIngestJob(BaseSparkJob):
     def __init__(self, table_name: str, file_name: str, primary_key: Optional[str] = None,
                  schema: Optional[StructType] = None, input_base_dir: str = "/data/home-credit-default-risk",
-                 output_base_dir: str = "/raw/home_credit", hive_db: str = "raw_lakehouse"):
+                 output_base_dir: str = "/raw/credit_risk", hive_db: str = "raw_credit_risk"):
         input_path = os.path.join(input_base_dir, file_name)
         output_path = os.path.join(output_base_dir, table_name)
         target_table = f"{hive_db}.raw_{table_name}"

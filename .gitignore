@@ -41,3 +41,6 @@ data/**/*.csv
 data/**/*.parquet
 data/home-credit-default-risk/*.csv
 !data/**/.gitkeep
+
+# Skills
+.agents

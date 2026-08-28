@@ -17,7 +17,7 @@ Apache Spark 3.5 is the unified analytics engine for large-scale distributed dat
 # Submit PySpark job to YARN
 spark-submit --master yarn \
              --deploy-mode client \
-             /jobs/spark_to_clickhouse_etl.py
+             /pipeline/examples/spark_to_clickhouse_etl.py
 
 # Launch interactive PySpark shell on YARN
 pyspark --master yarn

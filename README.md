@@ -90,7 +90,7 @@ make test
 
 ### Step 4: Run End-to-End Enterprise Pipeline
 ```bash
-docker exec master spark-submit --master yarn /jobs/spark_to_clickhouse_etl.py
+docker exec master spark-submit --master yarn /pipeline/examples/spark_to_clickhouse_etl.py
 ```
 
 ### Step 5: Stop the Cluster

@@ -93,14 +93,14 @@ make master
 ```bash
 spark-submit --master yarn \
              --deploy-mode client \
-             /jobs/wordcount.py
+             /pipeline/examples/wordcount.py
 ```
 
 ### B. Run End-to-End Lakehouse to OLAP Pipeline
 ```bash
 spark-submit --master yarn \
              --deploy-mode client \
-             /jobs/spark_to_clickhouse_etl.py
+             /pipeline/examples/spark_to_clickhouse_etl.py
 ```
 
 ### C. Connect to Hive via Beeline

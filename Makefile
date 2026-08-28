@@ -47,7 +47,7 @@ test:
 	docker exec -it master bash /scripts/tests/02-test-yarn-mr.sh
 	docker exec -it master spark-submit --master yarn /scripts/tests/03-test-spark-yarn.py
 	docker exec -it master spark-submit --master yarn /scripts/tests/04-test-hive-spark.py
-	docker exec -it master spark-submit --master yarn /jobs/spark_to_clickhouse_etl.py
+	docker exec -it master spark-submit --master yarn /pipeline/examples/spark_to_clickhouse_etl.py
 	docker exec -it master bash /scripts/tests/05-test-clickhouse.sh
 
 master:

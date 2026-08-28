@@ -106,7 +106,6 @@ services:
       - master_name_data:/hadoop/dfs/name
       - ./scripts:/scripts
       - ./data:/data
-      - ./jobs:/jobs
       - ./pipeline:/pipeline
       - ./notebooks:/notebooks
     deploy:
@@ -131,7 +130,6 @@ services:
       - worker1_dn_data:/hadoop/dfs/data
       - ./scripts:/scripts
       - ./data:/data
-      - ./jobs:/jobs
       - ./pipeline:/pipeline
     deploy:
       resources:
@@ -155,7 +153,6 @@ services:
       - worker2_dn_data:/hadoop/dfs/data
       - ./scripts:/scripts
       - ./data:/data
-      - ./jobs:/jobs
       - ./pipeline:/pipeline
     deploy:
       resources:

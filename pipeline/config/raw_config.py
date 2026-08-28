@@ -44,5 +44,5 @@ DATASETS = {
 }
 
 DEFAULT_BASE_INPUT_DIR = "/data/home-credit-default-risk"
-DEFAULT_HDFS_RAW_DIR = "/raw/home_credit"
-HIVE_RAW_DB = "raw_lakehouse"
+DEFAULT_HDFS_RAW_DIR = "/raw/credit_risk"
+HIVE_RAW_DB = "raw_credit_risk"

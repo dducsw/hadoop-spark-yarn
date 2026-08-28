@@ -9,7 +9,7 @@ from src.common.base_raw_ingest import BaseRawIngestJob
 def main():
     parser = argparse.ArgumentParser(description="Ingest credit_card_balance to HDFS raw")
     parser.add_argument("--input-dir", type=str, default="/data/home-credit-default-risk")
-    parser.add_argument("--output-dir", type=str, default="/raw/home_credit")
+    parser.add_argument("--output-dir", type=str, default="/raw/credit_risk")
     
     args = parser.parse_args()
     

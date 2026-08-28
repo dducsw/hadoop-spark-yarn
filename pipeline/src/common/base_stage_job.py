@@ -13,9 +13,9 @@ from src.common.base_spark_job import BaseSparkJob
 
 class BaseStageJob(BaseSparkJob):
     def __init__(self, table_name: str, primary_key: Optional[str] = None,
-                 dedup_cols: Optional[List[str]] = None, raw_base_dir: str = "/raw/home_credit",
-                 stage_base_dir: str = "/stage/home_credit", raw_db: str = "raw_lakehouse",
-                 stage_db: str = "stage_lakehouse"):
+                 dedup_cols: Optional[List[str]] = None, raw_base_dir: str = "/raw/credit_risk",
+                 stage_base_dir: str = "/stage/credit_risk", raw_db: str = "raw_credit_risk",
+                 stage_db: str = "stage_credit_risk"):
         source_path = os.path.join(raw_base_dir, table_name)
         target_path = os.path.join(stage_base_dir, table_name)
         source_table = f"{raw_db}.raw_{table_name}"
