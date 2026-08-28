@@ -135,6 +135,7 @@ make clean
 
 ## 7. Additional Documentation
 
+- [Practice Plan & Data Lake Modeling (Home Credit)](docs/PLAN.md)
 - [Operations Runbook](docs/RUNBOOK.md)
 - [Architecture & Network Ports](docs/ARCHITECTURE.md)
 - [Troubleshooting & FAQ](docs/TROUBLESHOOTING.md)

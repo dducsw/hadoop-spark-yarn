@@ -107,6 +107,7 @@ services:
       - ./scripts:/scripts
       - ./data:/data
       - ./jobs:/jobs
+      - ./pipeline:/pipeline
       - ./notebooks:/notebooks
     deploy:
       resources:
@@ -131,6 +132,7 @@ services:
       - ./scripts:/scripts
       - ./data:/data
       - ./jobs:/jobs
+      - ./pipeline:/pipeline
     deploy:
       resources:
         limits:
@@ -154,6 +156,7 @@ services:
       - ./scripts:/scripts
       - ./data:/data
       - ./jobs:/jobs
+      - ./pipeline:/pipeline
     deploy:
       resources:
         limits:
