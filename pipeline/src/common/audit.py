@@ -79,7 +79,8 @@ def log_pipeline_execution(
 
         # Append to HDFS Parquet
         (
-            audit_df.write.mode("append")
+            audit_df.write
+            .mode("append")
             .format("parquet")
             .save(AUDIT_HDFS_LOCATION)
         )

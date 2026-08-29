@@ -8,20 +8,38 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
 sys.path.extend([SRC_DIR])
 
-from src.common.base_spark_job import BaseSparkJob
+from src.common.base_spark_job import BaseSparkJob, WriteMode
 
 
 class BaseStageJob(BaseSparkJob):
-    def __init__(self, table_name: str, primary_key: Optional[str] = None,
-                 dedup_cols: Optional[List[str]] = None, raw_base_dir: str = "/raw/credit_risk",
-                 stage_base_dir: str = "/stage/credit_risk", raw_db: str = "raw_credit_risk",
-                 stage_db: str = "stage_credit_risk"):
+    def __init__(
+        self,
+        table_name: str,
+        primary_key: Optional[str] = None,
+        dedup_cols: Optional[List[str]] = None,
+        raw_base_dir: str = "/raw/credit_risk",
+        stage_base_dir: str = "/stage/credit_risk",
+        raw_db: str = "raw_credit_risk",
+        stage_db: str = "stage_credit_risk",
+        source_table: Optional[str] = None,
+        write_mode: WriteMode = WriteMode.OVERWRITE,
+        partition_by: Optional[List[str]] = None,
+    ):
         source_path = os.path.join(raw_base_dir, table_name)
         target_path = os.path.join(stage_base_dir, table_name)
-        source_table = f"{raw_db}.raw_{table_name}"
+        resolved_source_table = source_table or f"{raw_db}.raw_{table_name}"
         target_table = f"{stage_db}.stage_{table_name}"
-        super().__init__(pipeline_layer="stage", table_name=table_name, source_table=source_table,
-                         target_table=target_table, source_path=source_path, target_path=target_path, primary_key=primary_key)
+        super().__init__(
+            pipeline_layer="stage",
+            table_name=table_name,
+            source_table=resolved_source_table,
+            target_table=target_table,
+            source_path=source_path,
+            target_path=target_path,
+            primary_key=primary_key,
+            write_mode=write_mode,
+            partition_by=partition_by,
+        )
         self.dedup_cols = dedup_cols or ([primary_key] if primary_key else None)
 
     def extract(self, spark: SparkSession) -> DataFrame:
@@ -53,5 +71,9 @@ class BaseStageJob(BaseSparkJob):
         # 3. Custom type casting & cleaning
         df_cleaned = self.clean_and_cast(df)
 
-        # 4. Add stage lineage timestamp
+        # 4. Add source table lineage metadata if not already set
+        if "_source_table" not in df_cleaned.columns:
+            df_cleaned = df_cleaned.withColumn("_source_table", F.lit(self.source_table))
+
+        # 5. Add stage lineage timestamp
         return df_cleaned.withColumn("_staged_at", F.current_timestamp())

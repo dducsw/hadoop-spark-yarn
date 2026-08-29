@@ -2,7 +2,7 @@
 
 A local multi-container environment designed to simulate real-world on-premises enterprise Big Data architectures (commonly used in banking, telecommunications, and large enterprises that rely on Apache Hadoop as their core data platform).
 
-This project provides a practical sandbox for hands-on learning, architectural comprehension, and performance tuning across the full data lifecycle: **HDFS (Distributed Storage) ➔ YARN (Resource Management) ➔ Apache Spark (Distributed Compute) ➔ Apache Hive (Metastore) ➔ ClickHouse (OLAP Serving Layer)**.
+This project provides a practical sandbox for hands-on learning, architectural comprehension, and performance tuning across the full data lifecycle: **HDFS (Distributed Storage) ➔ YARN (Resource Management) ➔ Apache Spark (Distributed Compute) ➔ Apache Hive (Metastore) ➔ Apache Airflow (Workflow Orchestration) ➔ ClickHouse (OLAP Serving Layer)**.
 
 ---
 
@@ -31,13 +31,16 @@ This lab is structured to practice standard performance tuning and operational s
 4. **Hive Data Warehouse & Metastore Modeling**:
    - Decoupled Metastore architecture backed by PostgreSQL.
    - Managing external tables, schema evolution, and partition pruning.
-5. **Modern OLAP Serving (ClickHouse)**:
+5. **Data Pipeline Orchestration (Apache Airflow 3.2.1)**:
+   - Scheduling & chaining end-to-end Medallion pipelines (Raw ➔ Stage ➔ Curated ➔ Serving).
+   - Managing DAG dependencies, automated retries, dynamic parameters, and cluster health monitoring.
+6. **Modern OLAP Serving (ClickHouse)**:
    - Offloading high-concurrency analytical queries from the data lake to ClickHouse.
    - Designing MergeTree primary keys and partition strategies for sub-second dashboard queries.
 
 ---
 
-## 3. Cluster Components (6 Containers)
+## 3. Cluster Components (10 Containers)
 
 | Container | Host Ports | Services & Responsibilities |
 | :--- | :--- | :--- |
@@ -47,6 +50,10 @@ This lab is structured to practice standard performance tuning and operational s
 | **`clickhouse`** | `8123` (HTTP), `9004` (Native TCP) | ClickHouse OLAP Server for real-time analytical queries |
 | **`hive-db`** | `5432` | PostgreSQL 15 RDBMS storing Hive Metastore schema |
 | **`zookeeper`** | `2181` | ZooKeeper 3.8 Cluster Coordinator |
+| **`airflow-webserver`** | `8080` | Apache Airflow 3.2.1 Web UI & API Server (FastAPI / React) |
+| **`airflow-scheduler`** | Internal | Apache Airflow 3.2.1 Pipeline Scheduler & Executor |
+| **`airflow-dag-processor`**| Internal | Apache Airflow 3.2.1 DAG Parser & Bundle Sync |
+| **`airflow-db`** | Internal | PostgreSQL 15 RDBMS for Airflow Metadata |
 
 ---
 
@@ -54,16 +61,17 @@ This lab is structured to practice standard performance tuning and operational s
 
 Configured with strict resource caps to prevent resource exhaustion on local development machines (WSL2 / Docker Desktop):
 
-- **Total RAM Limit**: ~9.89 GB (Idle footprint: ~2.5 GB)
-- **Total CPU Limit**: 6.0 cores max
-
 | Service | Memory Limit | CPU Limit |
 | :--- | :--- | :--- |
 | `master` | 3.5 GB | 2.0 |
 | `worker1` | 2.25 GB | 1.5 |
 | `worker2` | 2.25 GB | 1.5 |
 | `clickhouse` | 1.0 GB | 0.5 |
+| `airflow-webserver` | 1.0 GB | 0.8 |
+| `airflow-scheduler` | 1.0 GB | 0.8 |
+| `airflow-dag-processor` | 512 MB | 0.5 |
 | `hive-db` | 512 MB | 0.3 |
+| `airflow-db` | 384 MB | 0.3 |
 | `zookeeper` | 512 MB | 0.2 |
 
 ---
@@ -88,9 +96,13 @@ Executes a 5-layer verification suite covering HDFS, YARN MapReduce, PySpark on 
 make test
 ```
 
-### Step 4: Run End-to-End Enterprise Pipeline
+### Step 4: Run End-to-End Enterprise Pipeline (CLI or Airflow)
 ```bash
+# Option A: Execute via Spark Submit directly on Master
 docker exec master spark-submit --master yarn /pipeline/examples/spark_to_clickhouse_etl.py
+
+# Option B: Trigger Airflow Medallion Pipeline DAG
+docker compose exec airflow-scheduler airflow dags test demo_bigdata_pipeline
 ```
 
 ### Step 5: Stop the Cluster
@@ -106,6 +118,7 @@ make clean
 
 ## 6. Web Interfaces
 
+- **Apache Airflow 3.2.1 UI**: [http://localhost:8080](http://localhost:8080) (`admin` / `admin`)
 - **JupyterLab (Interactive PySpark)**: [http://localhost:8888/lab](http://localhost:8888/lab)
 - **HDFS NameNode**: [http://localhost:9870](http://localhost:9870)
 - **YARN ResourceManager**: [http://localhost:8088](http://localhost:8088)

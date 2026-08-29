@@ -11,7 +11,7 @@ help:
 	@echo "  make logs        - Tail output logs from all cluster containers"
 	@echo "  make bootstrap   - Initialize HDFS, Spark JARs, Hive DB & ClickHouse"
 	@echo "  make status      - Run health checks across all platform components"
-	@echo "  make test        - Run end-to-end 5-layer smoke test suite"
+	@echo "  make test        - Run end-to-end 6-layer smoke test suite (HDFS, YARN, Spark, Hive, ClickHouse, Airflow)"
 	@echo "  make master      - Open interactive bash shell inside Master node"
 	@echo "  make clean       - Stop containers and purge all persistent volumes"
 
@@ -42,13 +42,14 @@ status:
 	docker exec -it master bash /scripts/ops/cluster-status.sh
 
 test:
-	@echo "Running Smoke Tests on Master..."
+	@echo "Running Smoke Tests on Master & Airflow..."
 	docker exec -it master bash /scripts/tests/01-test-hdfs.sh
 	docker exec -it master bash /scripts/tests/02-test-yarn-mr.sh
 	docker exec -it master spark-submit --master yarn /scripts/tests/03-test-spark-yarn.py
 	docker exec -it master spark-submit --master yarn /scripts/tests/04-test-hive-spark.py
 	docker exec -it master spark-submit --master yarn /pipeline/examples/spark_to_clickhouse_etl.py
 	docker exec -it master bash /scripts/tests/05-test-clickhouse.sh
+	docker exec -it airflow-scheduler bash /opt/airflow/scripts/tests/06-test-airflow.sh
 
 master:
 	docker exec -it master bash

@@ -67,12 +67,10 @@ with DAG(
         op_kwargs={"step_name": "Building OBT 360, Vintage Curves & ABT Features (credit_risk)"},
     )
 
-    # 5. ClickHouse OLAP Export (Serving Layer)
+    # 5. ClickHouse OLAP Export (Serving Layer - Native HDFS Ingestion)
     task_clickhouse_serving = BashOperator(
         task_id="demo_clickhouse_serving",
-        bash_command="""
-            echo "Serving Layer Ready: ClickHouse MergeTree tables synced for Real-time BI Dashboards."
-        """,
+        bash_command="bash /opt/airflow/scripts/ops/sync_hdfs_to_clickhouse.sh \n",
     )
 
     # DAG Dependency Flow

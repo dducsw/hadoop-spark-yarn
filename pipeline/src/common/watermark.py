@@ -1,5 +1,5 @@
 """Pipeline Watermark State Management Module."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.types import StringType, StructField, StructType, TimestampType
@@ -23,8 +23,9 @@ def get_watermark(spark: SparkSession, table_name: str) -> Optional[str]:
     """Retrieves the latest watermark value for a given table."""
     try:
         spark.sql(f"CREATE DATABASE IF NOT EXISTS {WATERMARK_DB_NAME}")
-        df = spark.table(f"{WATERMARK_DB_NAME}.{WATERMARK_TABLE_NAME}").filter(
-            f"table_name = '{table_name}' AND status = 'SUCCESS'"
+        df = (
+            spark.table(f"{WATERMARK_DB_NAME}.{WATERMARK_TABLE_NAME}")
+            .filter(f"table_name = '{table_name}' AND status = 'SUCCESS'")
         )
         if df.rdd.isEmpty():
             return None
@@ -42,9 +43,9 @@ def update_watermark(
 ) -> None:
     """Updates/Upserts watermark state for a table in HDFS and Hive."""
     if last_watermark_value is None:
-        last_watermark_value = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        last_watermark_value = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     new_row = [
         (
@@ -63,16 +64,19 @@ def update_watermark(
         spark.sql(f"CREATE DATABASE IF NOT EXISTS {WATERMARK_DB_NAME}")
         try:
             existing_df = spark.table(f"{WATERMARK_DB_NAME}.{WATERMARK_TABLE_NAME}")
-            updated_df = existing_df.filter(
-                f"table_name != '{table_name}'"
-            ).unionByName(new_df)
+            updated_df = (
+                existing_df
+                .filter(f"table_name != '{table_name}'")
+                .unionByName(new_df)
+            )
         except Exception:
             # Table doesn't exist yet
             updated_df = new_df
 
         # Overwrite watermark table with consolidated state
         (
-            updated_df.write.mode("overwrite")
+            updated_df.write
+            .mode("overwrite")
             .format("parquet")
             .save(WATERMARK_HDFS_LOCATION)
         )
