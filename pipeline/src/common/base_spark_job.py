@@ -50,7 +50,7 @@ class BaseSparkJob(ABC):
         self.write_mode = write_mode
         self.partition_by = partition_by or []
         self.source_system = source_system
-        self.batch_id = batch_id or f"batch_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        self.batch_id = batch_id or os.environ.get("BATCH_ID") or f"batch_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
         self.logger = get_logger(f"{pipeline_layer.upper()}_{table_name}")
 
     def add_audit_metadata(self, df: DataFrame) -> DataFrame:

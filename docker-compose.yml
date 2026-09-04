@@ -79,7 +79,7 @@ services:
           memory: 1024M
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8123/ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -180,6 +180,7 @@ services:
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: admin
       _AIRFLOW_WWW_USER_PASSWORD: admin
@@ -187,20 +188,10 @@ services:
       - ./pipeline/dags:/opt/airflow/dags
       - ./pipeline:/opt/airflow/pipeline
       - ./scripts:/opt/airflow/scripts
+      - ./config/airflow:/opt/airflow/config
       - airflow_logs:/opt/airflow/logs
     entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        airflow db migrate &&
-        (airflow sync-perm || true) &&
-        (airflow users create \
-          --username admin \
-          --firstname Admin \
-          --lastname User \
-          --role Admin \
-          --email admin@example.com \
-          --password admin || true)
+    command: /opt/airflow/scripts/bootstrap/05-init-airflow.sh
     depends_on:
       postgres:
         condition: service_healthy
@@ -219,6 +210,7 @@ services:
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: 'true'
       AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
     ports:
       - "8080:8080"
@@ -226,7 +218,9 @@ services:
       - ./pipeline/dags:/opt/airflow/dags
       - ./pipeline:/opt/airflow/pipeline
       - ./scripts:/opt/airflow/scripts
+      - ./config/airflow:/opt/airflow/config
       - airflow_logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
     command: api-server -p 8080
     depends_on:
       airflow-init:
@@ -258,7 +252,9 @@ services:
       - ./pipeline/dags:/opt/airflow/dags
       - ./pipeline:/opt/airflow/pipeline
       - ./scripts:/opt/airflow/scripts
+      - ./config/airflow:/opt/airflow/config
       - airflow_logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
     command: scheduler
     depends_on:
       airflow-init:
@@ -290,7 +286,9 @@ services:
       - ./pipeline/dags:/opt/airflow/dags
       - ./pipeline:/opt/airflow/pipeline
       - ./scripts:/opt/airflow/scripts
+      - ./config/airflow:/opt/airflow/config
       - airflow_logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
     command: dag-processor
     depends_on:
       airflow-init:
@@ -304,6 +302,59 @@ services:
           memory: 512M
     restart: unless-stopped
 
+  # 11. Apache Superset Database Initialization & Admin Creation
+  superset-init:
+    image: apache/superset:latest
+    container_name: superset-init
+    networks: [bigdata-net]
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-SUPERSET_SECRET_KEY_FINTECH_BIGDATA_PLATFORM_SECURE_2026}
+      SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:supersetpassword@postgres:5432/superset
+      SUPERSET_ADMIN_USERNAME: ${SUPERSET_ADMIN_USERNAME:-admin}
+      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:-admin}
+      PYTHONPATH: /app/pythonpath:/app/superset_home/.local/lib/python3.10/site-packages
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+    volumes:
+      - ./config/superset:/app/pythonpath
+      - ./scripts:/scripts
+      - superset_home:/app/superset_home
+    entrypoint: /bin/bash
+    command: /scripts/bootstrap/06-init-superset.sh
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # 12. Apache Superset Web Application (BI & Analytics Dashboards)
+  superset:
+    image: apache/superset:latest
+    container_name: superset
+    hostname: superset
+    networks: [bigdata-net]
+    environment:
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-SUPERSET_SECRET_KEY_FINTECH_BIGDATA_PLATFORM_SECURE_2026}
+      SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:supersetpassword@postgres:5432/superset
+      PYTHONPATH: /app/pythonpath:/app/superset_home/.local/lib/python3.10/site-packages
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+    ports:
+      - "8089:8088"
+    volumes:
+      - ./config/superset:/app/pythonpath
+      - ./scripts:/scripts
+      - superset_home:/app/superset_home
+    command: ["/bin/sh", "-c", "pip install --user --no-cache-dir clickhouse-connect psycopg2-binary && /usr/bin/run-server.sh"]
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1536M
+    restart: unless-stopped
+
 volumes:
   zk_data:
   hive_db_data:
@@ -313,3 +364,4 @@ volumes:
   worker2_dn_data:
   airflow_db_data:
   airflow_logs:
+  superset_home:

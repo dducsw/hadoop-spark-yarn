@@ -155,3 +155,43 @@ Common operational issues, diagnostic commands, and remediation strategies.
   docker compose run --rm airflow-init
   docker restart airflow-webserver airflow-scheduler airflow-dag-processor
   ```
+
+### Issue 2: Airflow task fails with `Permission denied (publickey,password)` when dispatching Spark
+- **Root Cause**: Airflow container runs as user `airflow` without SSH credentials to `root@master`.
+- **Best Practice Remediation**:
+  Mount `/var/run/docker.sock:/var/run/docker.sock` into Airflow services in `docker-compose.yml`.
+  Airflow then uses Docker-native `docker exec master bash -c "spark-submit ..."` inside `submit_spark_job.sh`, removing the need for `sshd` and SSH keys.
+
+### Issue 3: YARN queue starvation / apps stuck in `ACCEPTED` during concurrent Airflow tasks
+- **Root Cause**: Airflow triggers 8+ Spark jobs in parallel, exceeding total available YARN memory (~4GB across 2 worker nodes).
+- **Remediation**:
+  Use an Airflow Concurrency Pool `spark_yarn_pool` (configured with 2-3 slots) in `fintech_data_pipeline.py`:
+  ```bash
+  # Set pool slot limit
+  docker exec airflow-webserver airflow pools set spark_yarn_pool 3 "Limit concurrent Spark YARN tasks"
+  ```
+
+---
+
+## 9. Docker Compose Stack & Service Lifecycle
+
+### Issue 1: `could not find <service_name>: not found` on `docker compose start`
+- **Root Cause**: A service was renamed in `docker-compose.yml` (e.g. `hive-db` -> `postgres`), but Docker Desktop / Compose CLI `start` command attempts to start containers from previously cached compose project state.
+- **Remediation**:
+  Reconcile container state by running `up -d` with orphan cleanup:
+  ```bash
+  docker compose up -d --remove-orphans
+  ```
+
+---
+
+## 10. ClickHouse OLAP Ingestion
+
+### Issue 1: Serving layer ClickHouse table out of sync with DWH Mart
+- **Root Cause**: Sync script targeting legacy demo files (`products.csv`) rather than curated Kimball Mart (`obt_loan_portfolio_360`).
+- **Remediation**:
+  Run native HDFS Parquet ingestion via `sync_hdfs_to_clickhouse.sh`:
+  ```bash
+  docker exec airflow-webserver bash /opt/airflow/scripts/ops/sync_hdfs_to_clickhouse.sh
+  ```
+  This creates `analytics.obt_loan_portfolio_360` with `MergeTree` engine and streams Parquet data directly from `hdfs://master:9000/curated/credit_risk/obt_loan_portfolio_360/*.parquet` without Spark overhead.

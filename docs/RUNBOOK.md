@@ -62,9 +62,10 @@ make status
 - **MapReduce JobHistory UI**: [http://localhost:19888](http://localhost:19888)
 - **Spark History Server UI**: [http://localhost:18080](http://localhost:18080)
 - **HiveServer2 Web UI**: [http://localhost:10002](http://localhost:10002)
-- **Airflow Web UI**: [http://localhost:8080](http://localhost:8080) (`airflow` / `airflow`)
+- **Airflow Web UI**: [http://localhost:8080](http://localhost:8080) (`admin` / `admin`)
+- **Superset BI Web UI**: [http://localhost:8089](http://localhost:8089) (`admin` / `admin`)
 - **ClickHouse Web Query Client**: [http://localhost:8123/play](http://localhost:8123/play)
-- **PostgreSQL Multi-tenant**: Port `5432` (`metastore`, `source_crm`, `airflow`)
+- **PostgreSQL Multi-tenant**: Port `5433` on host, `5432` in network (`metastore`, `source_crm`, `airflow`, `superset`)
 
 ---
 
@@ -92,10 +93,11 @@ make master
 ```
 
 ### A. PostgreSQL Multi-Tenant OLTP Database Operations
-The unified `postgres` container hosts 3 isolated databases:
+The unified `postgres` container hosts 4 isolated databases:
 - `metastore` (User: `hive`, Pwd: `hivepassword`) - Hive Metastore catalog.
 - `source_crm` (User: `hive`, Pwd: `hivepassword`) - Home Credit OLTP source database.
 - `airflow` (User: `airflow`, Pwd: `airflowpassword`) - Airflow 3 metadata catalog.
+- `superset` (User: `superset`, Pwd: `supersetpassword`) - Apache Superset metadata catalog.
 
 #### 1. Inspect PostgreSQL databases via psql:
 ```bash
@@ -186,12 +188,51 @@ curl -s "http://clickhouse:8123/" --data-binary "
 ---
 
 ### E. Airflow Orchestration Operations
-- Access Airflow Webserver: [http://localhost:8080](http://localhost:8080) (`airflow` / `airflow`).
-- Trigger DAG via CLI:
+- Access Airflow Webserver: [http://localhost:8080](http://localhost:8080) (`admin` / `admin`).
+- Trigger Fintech Pipeline DAG:
 ```bash
-docker exec -it airflow-scheduler airflow dags trigger fintech_medallion_pipeline
+docker exec -it airflow-scheduler airflow dags trigger fintech_data_pipeline
 ```
-- List active DAGs:
+- List active DAGs and verify import errors:
 ```bash
 docker exec -it airflow-scheduler airflow dags list
+docker exec -it airflow-scheduler airflow dags list-import-errors
+```
+- Configuration file location: `config/airflow/airflow.cfg` (mounted into `/opt/airflow/config/`).
+
+---
+
+### F. Apache Superset BI & Dashboarding Operations
+- **Web UI**: [http://localhost:8089](http://localhost:8089) (`admin` / `admin`).
+- **Configuration file**: `config/superset/superset_config.py` (mounted into `/app/pythonpath/`).
+- **Pre-installed Drivers**: `clickhouse-connect` (v1.8.0), `psycopg2-binary`.
+
+#### 1. Supported Database Connection Strings:
+
+In Superset UI -> **Settings** -> **Database Connections** -> **+ Database**:
+
+| Target Database | Driver / Engine | SQLAlchemy Connection URI | Notes |
+|---|---|---|---|
+| **ClickHouse OLAP Serving** | `ClickHouse Connect` | `clickhouse+connect://default:clickhouse123@clickhouse:8123/analytics` | Query `obt_loan_portfolio_360` wide mart (Recommended for BI) |
+| **PostgreSQL Source CRM / OLTP** | `PostgreSQL` | `postgresql+psycopg2://hive:hivepassword@postgres:5432/source_crm` | Query raw CRM / transactions source tables |
+| **PostgreSQL Airflow Metadata** | `PostgreSQL` | `postgresql+psycopg2://airflow:airflowpassword@postgres:5432/airflow` | Monitor Airflow DAG & task run metrics |
+| **Hive / Spark SQL Thrift** | `Apache Hive` | `hive://root@master:10000/credit_risk` | Direct Lakehouse queries via Hive Thrift Server |
+
+**Connection Steps in Superset Web UI:**
+1. Navigate to `http://localhost:8089`, log in with `admin` / `admin`.
+2. Go to **Settings** -> **Database Connections** -> click **+ Database**.
+3. Select database engine (e.g. **ClickHouse Connect** or **PostgreSQL**).
+4. Paste the respective **SQLAlchemy URI** from the table above.
+5. Click **Test Connection** (returns *"Connection looks good!"*).
+6. Click **Connect** to finalize.
+
+#### 2. Re-run Superset Initialization (if needed):
+```bash
+docker exec -it superset bash /scripts/bootstrap/06-init-superset.sh
+```
+
+#### 3. Native Sync HDFS Curated Data to ClickHouse:
+Stream the 360-degree loan portfolio mart (`obt_loan_portfolio_360`) directly into ClickHouse MergeTree:
+```bash
+docker exec -it airflow-webserver bash /opt/airflow/scripts/ops/sync_hdfs_to_clickhouse.sh
 ```
