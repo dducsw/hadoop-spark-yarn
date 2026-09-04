@@ -57,14 +57,14 @@ with DAG(
     task_stage_processing = PythonOperator(
         task_id="demo_stage_processing",
         python_callable=log_step_info,
-        op_kwargs={"step_name": "Cleaning, SCD4 snapshotting & Dim/Fact modeling in Hive (stage_credit_risk)"},
+        op_kwargs={"step_name": "Cleaning, type casting & deduplicating source tables in Hive (stage_credit_risk)"},
     )
 
     # 4. Curated Marts & ML Features (Gold Layer)
     task_curated_analytics = PythonOperator(
         task_id="demo_curated_analytics",
         python_callable=log_step_info,
-        op_kwargs={"step_name": "Building OBT 360, Vintage Curves & ABT Features (credit_risk)"},
+        op_kwargs={"step_name": "Building Conformed Dim/Fact (Kimball), OBT 360, Vintage Curves & ABT Features (credit_risk)"},
     )
 
     # 5. ClickHouse OLAP Export (Serving Layer - Native HDFS Ingestion)

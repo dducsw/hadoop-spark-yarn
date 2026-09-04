@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import functions as F
 
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -36,6 +37,8 @@ class BaseSparkJob(ABC):
         primary_key: Optional[str] = None,
         write_mode: WriteMode = WriteMode.OVERWRITE,
         partition_by: Optional[List[str]] = None,
+        source_system: str = "home_credit",
+        batch_id: Optional[str] = None,
     ):
         self.pipeline_layer = pipeline_layer
         self.table_name = table_name
@@ -46,7 +49,24 @@ class BaseSparkJob(ABC):
         self.primary_key = primary_key
         self.write_mode = write_mode
         self.partition_by = partition_by or []
+        self.source_system = source_system
+        self.batch_id = batch_id or f"batch_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
         self.logger = get_logger(f"{pipeline_layer.upper()}_{table_name}")
+
+    def add_audit_metadata(self, df: DataFrame) -> DataFrame:
+        """Standardize audit columns across all layers: _source_system, _processed_at, _batch_id."""
+        for col_name in [
+            "_source_system", "_processed_at", "_batch_id",
+            "_source_table", "_staged_at", "_ingested_at", "_source_file", "_curated_at"
+        ]:
+            if col_name in df.columns:
+                df = df.drop(col_name)
+        return (
+            df
+            .withColumn("_source_system", F.lit(self.source_system))
+            .withColumn("_processed_at", F.current_timestamp())
+            .withColumn("_batch_id", F.lit(self.batch_id))
+        )
 
     @abstractmethod
     def extract(self, spark: SparkSession) -> DataFrame:
@@ -54,9 +74,8 @@ class BaseSparkJob(ABC):
         pass
 
     def validate(self, df: DataFrame) -> None:
-        """Step 2: Quality checks (overridable in subclasses)."""
-        if df.rdd.isEmpty():
-            raise ValueError(f"Job Failed: '{self.source_path}' is empty or unreadable!")
+        """Step 2: Quality checks (overridable in subclasses without triggering full scans)."""
+        pass
 
     @abstractmethod
     def transform(self, df: DataFrame) -> DataFrame:
@@ -68,6 +87,10 @@ class BaseSparkJob(ABC):
         self.logger.info(
             f"Writing to Parquet: {self.target_path} | Mode: {self.write_mode.value} | Partitions: {self.partition_by}"
         )
+        row_count = df.count()
+        if row_count == 0:
+            self.logger.warning(f"Job Warning: 0 records to write for {self.target_table}")
+
         writer = df.write.format("parquet")
 
         if self.partition_by:
@@ -83,7 +106,7 @@ class BaseSparkJob(ABC):
 
         # Register Hive Metastore DDL
         self._register_hive_table(spark)
-        return df.count()
+        return row_count
 
     def _register_hive_table(self, spark: SparkSession) -> None:
         """Ensures Hive Database exists and Hive external/managed table is registered."""
@@ -107,6 +130,7 @@ class BaseSparkJob(ABC):
             col_count = len(df_in.columns)
             self.validate(df_in)
             df_out = self.transform(df_in)
+            df_out = self.add_audit_metadata(df_out)
             row_count = self.load(spark, df_out)
             status = "SUCCESS"
             self.logger.info(f"SUCCESS: Processed {row_count:,} rows ({col_count} cols) for {self.table_name}")

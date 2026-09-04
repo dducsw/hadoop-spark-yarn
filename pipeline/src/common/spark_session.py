@@ -1,3 +1,11 @@
+import socketserver
+
+# Windows compatibility patch for PySpark on Python 3.12+
+if not hasattr(socketserver, "UnixStreamServer"):
+    class DummyUnixServer:
+        pass
+    socketserver.UnixStreamServer = DummyUnixServer
+
 from pyspark.sql import SparkSession
 
 

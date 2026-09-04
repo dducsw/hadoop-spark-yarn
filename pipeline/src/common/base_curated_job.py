@@ -56,9 +56,5 @@ class BaseCuratedJob(BaseSparkJob):
         # 1. Execute business feature engineering / aggregations
         df_features = self.build_features(df)
 
-        # 2. Add source table lineage metadata if not already set
-        if "_source_table" not in df_features.columns:
-            df_features = df_features.withColumn("_source_table", F.lit(self.source_table))
-
-        # 3. Add curated lineage timestamp
-        return df_features.withColumn("_curated_at", F.current_timestamp())
+        # 2. Add standardized metadata audit columns
+        return self.add_audit_metadata(df_features)

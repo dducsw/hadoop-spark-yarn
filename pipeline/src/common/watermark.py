@@ -60,15 +60,13 @@ def update_watermark(
     try:
         new_df: DataFrame = spark.createDataFrame(new_row, schema=WATERMARK_SCHEMA)
 
-        # Upsert logic: read existing watermark table, filter out current table, union with new row
+        # Upsert logic: collect existing rows in driver to prevent lazy read-then-overwrite race condition
         spark.sql(f"CREATE DATABASE IF NOT EXISTS {WATERMARK_DB_NAME}")
         try:
             existing_df = spark.table(f"{WATERMARK_DB_NAME}.{WATERMARK_TABLE_NAME}")
-            updated_df = (
-                existing_df
-                .filter(f"table_name != '{table_name}'")
-                .unionByName(new_df)
-            )
+            existing_rows = existing_df.filter(f"table_name != '{table_name}'").collect()
+            all_rows = existing_rows + new_row
+            updated_df = spark.createDataFrame(all_rows, schema=WATERMARK_SCHEMA)
         except Exception:
             # Table doesn't exist yet
             updated_df = new_df

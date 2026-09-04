@@ -51,8 +51,4 @@ class BaseRawIngestJob(BaseSparkJob):
         return reader.option("inferSchema", "true").csv(self.source_path)
 
     def transform(self, df: DataFrame) -> DataFrame:
-        return (
-            df
-            .withColumn("_ingested_at", F.current_timestamp())
-            .withColumn("_source_file", F.input_file_name())
-        )
+        return self.add_audit_metadata(df)

@@ -46,16 +46,6 @@ class BaseStageJob(BaseSparkJob):
         self.logger.info(f"Reading Raw Parquet from {self.source_path}")
         return spark.read.parquet(self.source_path)
 
-    def validate(self, df: DataFrame) -> None:
-        super().validate(df)
-        if self.primary_key and self.primary_key in df.columns:
-            null_count = df.filter(F.col(self.primary_key).isNull()).count()
-            if null_count > 0:
-                self.logger.warning(f"Stage Warning: Dropping {null_count} rows with null PK '{self.primary_key}'")
-
-    def clean_and_cast(self, df: DataFrame) -> DataFrame:
-        """Override this method in table-specific stage jobs for custom type casts."""
-        return df
 
     def transform(self, df: DataFrame) -> DataFrame:
         # 1. Filter out null PKs if specified
@@ -68,12 +58,5 @@ class BaseStageJob(BaseSparkJob):
             if valid_cols:
                 df = df.dropDuplicates(valid_cols)
 
-        # 3. Custom type casting & cleaning
-        df_cleaned = self.clean_and_cast(df)
-
-        # 4. Add source table lineage metadata if not already set
-        if "_source_table" not in df_cleaned.columns:
-            df_cleaned = df_cleaned.withColumn("_source_table", F.lit(self.source_table))
-
-        # 5. Add stage lineage timestamp
-        return df_cleaned.withColumn("_staged_at", F.current_timestamp())
+        # 3. Add standardized metadata audit columns
+        return self.add_audit_metadata(df)
