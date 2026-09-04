@@ -28,8 +28,8 @@ echo "[Master] Starting MapReduce JobHistoryServer..."
 mapred historyserver > /var/log/hadoop/mapred-historyserver.log 2>&1 &
 
 # 4. Wait for PostgreSQL & Start Hive Metastore
-echo "[Master] Waiting for PostgreSQL (hive-db:5432)..."
-while ! nc -z hive-db 5432; do
+echo "[Master] Waiting for PostgreSQL (postgres:5432)..."
+while ! nc -z postgres 5432 && ! nc -z hive-db 5432; do
   sleep 2
 done
 

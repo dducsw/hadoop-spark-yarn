@@ -24,20 +24,26 @@ services:
           memory: 512M
     restart: unless-stopped
 
-  # 2. Hive Metastore Database (PostgreSQL 15)
-  hive-db:
+  # 2. Relational Database (PostgreSQL 15 - Hive Metastore & Source OLTP/CRM)
+  postgres:
     image: postgres:15-alpine
-    container_name: hive-db
-    hostname: hive-db
-    networks: [bigdata-net]
+    container_name: postgres
+    hostname: postgres
+    networks:
+      bigdata-net:
+        aliases:
+          - postgres
+          - hive-db
+          - airflow-db
     environment:
       POSTGRES_DB: metastore
       POSTGRES_USER: hive
       POSTGRES_PASSWORD: hivepassword
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - hive_db_data:/var/lib/postgresql/data
+      - ./scripts/bootstrap/init-postgres-dbs.sql:/docker-entrypoint-initdb.d/init-postgres-dbs.sql:ro
     deploy:
       resources:
         limits:
@@ -100,7 +106,7 @@ services:
     depends_on:
       zookeeper:
         condition: service_started
-      hive-db:
+      postgres:
         condition: service_healthy
     volumes:
       - master_name_data:/hadoop/dfs/name
@@ -162,38 +168,14 @@ services:
     command: /scripts/bootstrap/start-worker.sh
     restart: unless-stopped
 
-  # 7. Airflow Metadata Database (PostgreSQL 15)
-  airflow-db:
-    image: postgres:15-alpine
-    container_name: airflow-db
-    hostname: airflow-db
-    networks: [bigdata-net]
-    environment:
-      POSTGRES_DB: airflow
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflowpassword
-    volumes:
-      - airflow_db_data:/var/lib/postgresql/data
-    deploy:
-      resources:
-        limits:
-          cpus: "0.3"
-          memory: 384M
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # 8. Airflow Database Init & Admin User Creation
+  # 7. Airflow Database Init & Admin User Creation
   airflow-init:
     image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.2.1}
     container_name: airflow-init
     networks: [bigdata-net]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@airflow-db:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@postgres:5432/airflow
       AIRFLOW__CORE__FERNET_KEY: ''
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
@@ -220,11 +202,11 @@ services:
           --email admin@example.com \
           --password admin || true)
     depends_on:
-      airflow-db:
+      postgres:
         condition: service_healthy
     restart: "no"
 
-  # 9. Airflow Webserver / API Server (UI on port 8080)
+  # 8. Airflow Webserver / API Server (UI on port 8080)
   airflow-webserver:
     image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.2.1}
     container_name: airflow-webserver
@@ -232,7 +214,7 @@ services:
     networks: [bigdata-net]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@airflow-db:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@postgres:5432/airflow
       AIRFLOW__CORE__FERNET_KEY: ''
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
@@ -249,7 +231,7 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
-      airflow-db:
+      postgres:
         condition: service_healthy
     deploy:
       resources:
@@ -258,7 +240,7 @@ services:
           memory: 1024M
     restart: unless-stopped
 
-  # 10. Airflow Scheduler
+  # 9. Airflow Scheduler
   airflow-scheduler:
     image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.2.1}
     container_name: airflow-scheduler
@@ -266,7 +248,7 @@ services:
     networks: [bigdata-net]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@airflow-db:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@postgres:5432/airflow
       AIRFLOW__CORE__FERNET_KEY: ''
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
@@ -281,7 +263,7 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
-      airflow-db:
+      postgres:
         condition: service_healthy
     deploy:
       resources:
@@ -290,7 +272,7 @@ services:
           memory: 1024M
     restart: unless-stopped
 
-  # 11. Airflow DAG Processor (Airflow 3 Architecture)
+  # 10. Airflow DAG Processor (Airflow 3 Architecture)
   airflow-dag-processor:
     image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.2.1}
     container_name: airflow-dag-processor
@@ -298,7 +280,7 @@ services:
     networks: [bigdata-net]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@airflow-db:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@postgres:5432/airflow
       AIRFLOW__CORE__FERNET_KEY: ''
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
@@ -313,7 +295,7 @@ services:
     depends_on:
       airflow-init:
         condition: service_completed_successfully
-      airflow-db:
+      postgres:
         condition: service_healthy
     deploy:
       resources:
