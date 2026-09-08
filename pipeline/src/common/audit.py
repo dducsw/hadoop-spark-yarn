@@ -7,9 +7,12 @@ from typing import Optional
 from pyspark.sql import SparkSession
 
 try:
-    from src.common.db_metadata import get_metadata_cursor
-except ImportError:
-    from db_metadata import get_metadata_cursor
+    from .db_metadata import get_metadata_cursor
+except (ImportError, ValueError):
+    try:
+        from src.common.db_metadata import get_metadata_cursor
+    except ImportError:
+        from db_metadata import get_metadata_cursor
 
 
 def log_pipeline_execution(
@@ -25,6 +28,7 @@ def log_pipeline_execution(
     status: str,
     row_count: Optional[int] = None,
     column_count: Optional[int] = None,
+    rejected_count: Optional[int] = None,
     error_message: Optional[str] = None,
 ) -> None:
     """Logs job run metrics into PostgreSQL/RDBMS metadata table (zero HDFS small-files)."""
@@ -40,8 +44,8 @@ def log_pipeline_execution(
                 INSERT INTO pipeline_audit_log (
                     job_id, pipeline_layer, table_name, source_table, target_table,
                     source_path, target_path, start_time, end_time, duration_sec,
-                    row_count, column_count, status, error_message
-                ) VALUES ({', '.join([placeholder] * 14)})
+                    row_count, column_count, rejected_count, status, error_message
+                ) VALUES ({', '.join([placeholder] * 15)})
             """
             cursor.execute(
                 sql,
@@ -58,6 +62,7 @@ def log_pipeline_execution(
                     float(duration_sec),
                     int(row_count) if row_count is not None else None,
                     int(column_count) if column_count is not None else None,
+                    int(rejected_count) if rejected_count is not None else 0,
                     status,
                     str(error_message) if error_message else None,
                 ),

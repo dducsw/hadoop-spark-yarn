@@ -53,6 +53,7 @@ class BaseSparkJob(ABC):
         self.source_system = source_system
         self.batch_id = batch_id or os.environ.get("BATCH_ID") or f"batch_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
         self.watermark_col = watermark_col
+        self.rejected_count = 0
         self.logger = get_logger(f"{pipeline_layer.upper()}_{table_name}")
 
     def add_audit_metadata(self, df: DataFrame) -> DataFrame:
@@ -189,6 +190,7 @@ class BaseSparkJob(ABC):
                 status=status,
                 row_count=row_count,
                 column_count=col_count,
+                rejected_count=self.rejected_count,
                 error_message=error_msg,
             )
             spark.stop()

@@ -91,6 +91,7 @@ class CuratedObtLoanPortfolio360Job(BaseSparkJob):
                 dim_cust["cnt_children"],
                 dim_cust["cnt_fam_members"],
                 dim_cust["amt_income_total"],
+                F.coalesce(dim_cust["income_bracket"], F.lit("Unknown")).alias("income_bracket"),
                 F.coalesce(dim_cust["name_income_type"], F.lit("Unknown")).alias("name_income_type"),
                 F.coalesce(dim_cust["name_education_type"], F.lit("Unknown")).alias("name_education_type"),
                 F.coalesce(dim_cust["name_family_status"], F.lit("Unknown")).alias("name_family_status"),

@@ -20,6 +20,7 @@ SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.extend([SRC_DIR])
 
 from src.common.base_spark_job import BaseSparkJob, WriteMode
+from src.common.security import mask_income_bracket
 
 
 class CuratedDimCustomerJob(BaseSparkJob):
@@ -94,6 +95,7 @@ class CuratedDimCustomerJob(BaseSparkJob):
                 .otherwise(F.floor(F.abs(F.col("days_employed")) / 365.25))
                 .cast(IntegerType()),
             )
+            .withColumn("income_bracket", mask_income_bracket(F.col("amt_income_total")))
             .select(
                 "sk_customer_key",
                 "sk_id_curr",
@@ -103,6 +105,7 @@ class CuratedDimCustomerJob(BaseSparkJob):
                 "cnt_children",
                 "cnt_fam_members",
                 "amt_income_total",
+                "income_bracket",
                 "name_income_type",
                 "name_education_type",
                 "name_family_status",
@@ -123,6 +126,7 @@ class CuratedDimCustomerJob(BaseSparkJob):
             StructField("cnt_children", IntegerType(), True),
             StructField("cnt_fam_members", IntegerType(), True),
             StructField("amt_income_total", DecimalType(18, 2), True),
+            StructField("income_bracket", StringType(), True),
             StructField("name_income_type", StringType(), True),
             StructField("name_education_type", StringType(), True),
             StructField("name_family_status", StringType(), True),
@@ -132,7 +136,7 @@ class CuratedDimCustomerJob(BaseSparkJob):
             StructField("age_years", IntegerType(), True),
             StructField("employed_years", IntegerType(), True),
         ])
-        unknown_row = [(-1, -1, "Unknown", "N", "N", 0, 1, None, "Unknown", "Unknown", "Unknown", "Unknown", "Unknown", "Unknown", 0, 0)]
+        unknown_row = [(-1, -1, "Unknown", "N", "N", 0, 1, None, "Unknown", "Unknown", "Unknown", "Unknown", "Unknown", "Unknown", "Unknown", 0, 0)]
         unknown_df = df.sparkSession.createDataFrame(unknown_row, schema=unknown_schema)
 
         return df_curated.unionByName(unknown_df)
@@ -150,7 +154,7 @@ class CuratedDimCustomerJob(BaseSparkJob):
             df_existing = spark.read.parquet(self.target_path)
             compare_cols = [
                 "code_gender", "flag_own_car", "flag_own_realty", "cnt_children",
-                "cnt_fam_members", "amt_income_total", "name_income_type",
+                "cnt_fam_members", "amt_income_total", "income_bracket", "name_income_type",
                 "name_education_type", "name_family_status", "name_housing_type",
                 "occupation_type", "organization_type", "age_years", "employed_years"
             ]
@@ -183,6 +187,7 @@ class CuratedDimCustomerJob(BaseSparkJob):
                     "cnt_children",
                     "cnt_fam_members",
                     "amt_income_total",
+                    "income_bracket",
                     "name_income_type",
                     "name_education_type",
                     "name_family_status",

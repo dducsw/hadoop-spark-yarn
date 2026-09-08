@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS analytics.obt_loan_portfolio_360 (
     cnt_children Nullable(Int32),
     cnt_fam_members Nullable(Int32),
     amt_income_total Nullable(Decimal(18, 2)),
+    income_bracket Nullable(String),
     name_income_type Nullable(String),
     name_education_type Nullable(String),
     name_family_status Nullable(String),
@@ -90,6 +91,7 @@ ch_exec "
 INSERT INTO analytics.obt_loan_portfolio_360_staging (
     sk_id_curr, sk_id_prev, is_current_application, target_default_flag,
     code_gender, flag_own_car, flag_own_realty, cnt_children, cnt_fam_members, amt_income_total,
+    income_bracket,
     name_income_type, name_education_type, name_family_status, name_housing_type, occupation_type,
     organization_type, age_years, employed_years, name_contract_type, portfolio_category,
     product_group, is_revolving, channel_type, name_goods_category, name_seller_industry,
@@ -102,6 +104,7 @@ INSERT INTO analytics.obt_loan_portfolio_360_staging (
 SELECT
     sk_id_curr, sk_id_prev, is_current_application, target_default_flag,
     code_gender, flag_own_car, flag_own_realty, cnt_children, cnt_fam_members, amt_income_total,
+    income_bracket,
     name_income_type, name_education_type, name_family_status, name_housing_type, occupation_type,
     organization_type, age_years, employed_years, name_contract_type, portfolio_category,
     product_group, is_revolving, channel_type, name_goods_category, name_seller_industry,

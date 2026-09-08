@@ -99,11 +99,13 @@ def _init_schema(cursor, backend: str) -> None:
                 duration_sec DOUBLE PRECISION NOT NULL,
                 row_count BIGINT,
                 column_count INT,
+                rejected_count BIGINT DEFAULT 0,
                 status VARCHAR(32) NOT NULL,
                 error_message TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        cursor.execute("ALTER TABLE pipeline_audit_log ADD COLUMN IF NOT EXISTS rejected_count BIGINT DEFAULT 0;")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS pipeline_watermark (
                 table_name VARCHAR(128) PRIMARY KEY,
@@ -128,11 +130,16 @@ def _init_schema(cursor, backend: str) -> None:
                 duration_sec REAL NOT NULL,
                 row_count INTEGER,
                 column_count INTEGER,
+                rejected_count INTEGER DEFAULT 0,
                 status TEXT NOT NULL,
                 error_message TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        try:
+            cursor.execute("ALTER TABLE pipeline_audit_log ADD COLUMN rejected_count INTEGER DEFAULT 0;")
+        except Exception:
+            pass
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS pipeline_watermark (
                 table_name TEXT PRIMARY KEY,
