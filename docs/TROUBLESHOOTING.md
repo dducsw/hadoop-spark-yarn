@@ -28,16 +28,21 @@ Common operational issues, diagnostic commands, and remediation strategies.
 
 ## 2. YARN & Resource Management Issues
 
-### Issue 1: Spark application stuck in `ACCEPTED` state
-- **Root Cause**: NodeManagers have insufficient allocated memory or vCores to spawn the ApplicationMaster container.
+### Issue 1: Spark application stuck in `ACCEPTED` state / `Queue's AM resource limit exceeded`
+- **Root Cause**:
+  1. NodeManagers have insufficient allocated memory or vCores to spawn the ApplicationMaster container.
+  2. CapacityScheduler restricts the proportion of queue resources allocated to ApplicationMasters via `yarn.scheduler.capacity.maximum-am-resource-percent` (default ~10-20%). On a local cluster with 4GB total RAM across 2 workers, the AM limit is 1024MB, allowing only 1 AM active at a time. Additional Spark submissions wait safely in `ACCEPTED` state until the current AM completes.
+- **Diagnostic**:
+  ```bash
+  docker exec -it master yarn application -list
+  docker exec -it master yarn node -list
+  ```
 - **Remediation**:
-  1. Verify running NodeManagers:
+  1. This is normal queuing behavior under high concurrency; jobs execute sequentially without crashing the cluster.
+  2. Restrict Airflow task concurrency via `spark_yarn_pool` (2-3 slots).
+  3. Reduce executor/driver memory requests in `submit_spark_job.sh`:
      ```bash
-     docker exec -it master yarn node -list
-     ```
-  2. Reduce resource requests when submitting the job:
-     ```bash
-     spark-submit --master yarn --driver-memory 512m --executor-memory 512m ...
+     spark-submit --master yarn --deploy-mode client --executor-memory 1g --conf spark.executor.memoryOverhead=384m ...
      ```
 
 ### Issue 2: Container killed due to Virtual Memory limits
@@ -116,7 +121,7 @@ Common operational issues, diagnostic commands, and remediation strategies.
 
 ---
 
-## 7. Medallion Pipeline & Raw Ingestion Issues
+## 7. Data Pipeline (Raw -> Stage ODS -> DWH Kimball) Issues
 
 ### Issue 1: `SparkFileNotFoundException` during incremental load
 - **Root Cause**: Spark lazy evaluation reading from and writing to the exact same HDFS directory during an overwrite/append operation.
@@ -165,11 +170,36 @@ Common operational issues, diagnostic commands, and remediation strategies.
 ### Issue 3: YARN queue starvation / apps stuck in `ACCEPTED` during concurrent Airflow tasks
 - **Root Cause**: Airflow triggers 8+ Spark jobs in parallel, exceeding total available YARN memory (~4GB across 2 worker nodes).
 - **Remediation**:
-  Use an Airflow Concurrency Pool `spark_yarn_pool` (configured with 2-3 slots) in `fintech_data_pipeline.py`:
+  Use an Airflow Concurrency Pool `spark_yarn_pool` (configured with 2-3 slots) in `risk_data_pipeline.py`:
   ```bash
   # Set pool slot limit
   docker exec airflow-webserver airflow pools set spark_yarn_pool 3 "Limit concurrent Spark YARN tasks"
   ```
+
+### Issue 4: `ServerResponseError: Invalid auth token: Signature verification failed`
+- **Root Cause**: In Airflow 3, `LocalExecutor` workers communicate with the Execution API via JWT tokens. When `[api_auth] jwt_secret` (`AIRFLOW__API_AUTH__JWT_SECRET`) is omitted, `airflow-scheduler` and `airflow-webserver` (api-server) each generate an ephemeral secret in memory on boot. As a result, the Execution API server fails JWT signature verification.
+- **Remediation**:
+  Set a persistent, identical JWT secret across all Airflow services in `docker-compose.yml`:
+  ```yaml
+  AIRFLOW__API_AUTH__JWT_SECRET: 'tj3TRHkFNkiP/iGlq5lmxg=='
+  ```
+  Then recreate the services:
+  ```bash
+  docker compose up -d --force-recreate airflow-webserver airflow-scheduler airflow-dag-processor
+  ```
+
+### Issue 5: `UndefinedError: 'ts_nodash' is undefined` in template rendering
+- **Root Cause**: In Airflow 3, manual runs (`run_type=manual`) without an explicit `logical_date` set `dag_run.logical_date = None`. Consequently, legacy Jinja variables (`ts_nodash`, `ts`, `ds_nodash`) are not defined in the template context.
+- **Remediation**:
+  Replace `ts_nodash` with the universal `run_id` in `build_spark_task`:
+  ```python
+  bash_command=f"bash /opt/airflow/scripts/ops/submit_spark_job.sh {layer} {script} '{{{{ run_id }}}}' "
+  ```
+
+### Issue 6: `Terminating process detail={"reason":"not_found"} ... return code -15 (SIGTERM)`
+- **Root Cause**: When a running task is cleared via `airflow tasks clear` or the Web UI, Airflow archives the task instance attempt and issues a `SIGTERM` (`exit code -15`) to kill the active worker subprocess before queuing the next attempt.
+- **Remediation**:
+  This is expected lifecycle behavior upon task clearing. Monitor the newly scheduled attempt log (`attempt=2.log`) once the scheduler restarts the task.
 
 ---
 

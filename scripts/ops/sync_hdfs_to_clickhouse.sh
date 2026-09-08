@@ -79,12 +79,15 @@ CREATE TABLE IF NOT EXISTS analytics.obt_loan_portfolio_360 (
 ORDER BY (assumeNotNull(sk_id_curr), coalesce(sk_id_prev, 0));
 "
 
-# 3. Truncate for idempotent batch refresh and perform native HDFS ingestion
-echo "[3/4] Truncating table for idempotent load and inserting from HDFS Parquet..."
-ch_exec "TRUNCATE TABLE analytics.obt_loan_portfolio_360;"
+# Also ensure Staging table exists with identical schema
+ch_exec "CREATE TABLE IF NOT EXISTS analytics.obt_loan_portfolio_360_staging AS analytics.obt_loan_portfolio_360;"
+
+# 3. Ingest into Staging table & verify before Atomic Swap
+echo "[3/4] Ingesting HDFS Parquet into staging table (production table stays live)..."
+ch_exec "TRUNCATE TABLE analytics.obt_loan_portfolio_360_staging;"
 
 ch_exec "
-INSERT INTO analytics.obt_loan_portfolio_360 (
+INSERT INTO analytics.obt_loan_portfolio_360_staging (
     sk_id_curr, sk_id_prev, is_current_application, target_default_flag,
     code_gender, flag_own_car, flag_own_realty, cnt_children, cnt_fam_members, amt_income_total,
     name_income_type, name_education_type, name_family_status, name_housing_type, occupation_type,
@@ -110,8 +113,20 @@ SELECT
 FROM hdfs('${HDFS_SRC_PATH}', 'Parquet');
 "
 
+# Validate staging row count before committing swap
+STAGING_COUNT=$(ch_exec "SELECT count() FROM analytics.obt_loan_portfolio_360_staging;" | tr -d '[:space:]')
+echo ">>> Staging row count verified: ${STAGING_COUNT}"
+
+if [ -z "$STAGING_COUNT" ] || [ "$STAGING_COUNT" -eq 0 ]; then
+    echo ">>> [ERROR] Staging table contains 0 records! Aborting swap to protect production data."
+    exit 1
+fi
+
+echo ">>> Performing zero-downtime atomic swap (EXCHANGE TABLES)..."
+ch_exec "EXCHANGE TABLES analytics.obt_loan_portfolio_360 AND analytics.obt_loan_portfolio_360_staging;"
+
 # 4. Verify loaded records
-echo "[4/4] Ingestion finished! Summary stats from ClickHouse:"
+echo "[4/4] Ingestion and atomic swap finished! Summary stats from ClickHouse:"
 ch_exec "
 SELECT
     count() AS total_rows,

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Production Airflow DAG: Fintech Data Platform Pipeline
-Orchestrates: Raw Landing -> Stage ODS -> DWH Core (Kimball Dims/Facts) -> Data Mart (OBT 360) -> OLAP Serving (ClickHouse)
-Standard: Zero-top-level compute, TaskFlow API, fine-grained lineage, and deterministic batch_id.
+Production Airflow DAG: Credit Risk Data Pipeline (risk_data_pipeline)
+Orchestrates: Raw Landing -> Stage ODS -> Curated Core (Kimball Dims/Facts) -> Data Mart (OBT 360) -> OLAP Serving (ClickHouse)
+Standard: Zero-top-level compute, TaskFlow API, fine-grained lineage, deterministic batch_id, and terminal barrier.
 """
 from datetime import datetime, timedelta
 from typing import Dict, Any
@@ -49,9 +49,9 @@ def build_spark_task(task_id: str, layer: str, script: str) -> BashOperator:
     """Standardized Spark on YARN runner with batch_id lineage and concurrency pool."""
     return BashOperator(
         task_id=task_id,
-        bash_command=f"bash /opt/airflow/scripts/ops/submit_spark_job.sh {layer} {script} 'batch_{{{{ ts_nodash }}}}'",
+        bash_command=f"bash /opt/airflow/scripts/ops/submit_spark_job.sh {layer} {script} '{{{{ run_id }}}}' ",
         pool="spark_yarn_pool",
-        env={"BATCH_ID": "batch_{{ ts_nodash }}"},
+        env={"BATCH_ID": "{{ run_id }}"},
     )
 
 
@@ -59,16 +59,16 @@ def build_spark_task(task_id: str, layer: str, script: str) -> BashOperator:
 # 3. DAG Definition
 # -----------------------------------------------------------------------------
 @dag(
-    dag_id="fintech_data_pipeline",
+    dag_id="risk_data_pipeline",
     default_args=default_args,
-    description="Big Data Pipeline: HDFS Raw -> Stage ODS -> DWH Core -> BI Mart -> ClickHouse OLAP",
+    description="Big Data Pipeline: HDFS Raw -> Stage ODS -> Curated Core -> BI Mart -> ClickHouse OLAP",
     schedule="0 2 * * *",  # Daily at 02:00 UTC
     start_date=datetime(2026, 1, 1),
     catchup=False,
     max_active_runs=1,
-    tags=["fintech", "hadoop", "spark", "yarn", "dwh", "clickhouse"],
+    tags=["credit_risk", "hadoop", "spark", "yarn", "dwh", "clickhouse"],
 )
-def fintech_data_pipeline():
+def risk_data_pipeline():
 
     # Step 0: Cluster Liveness & Connectivity Gate (Fail-fast)
     cluster_healthcheck = BashOperator(
@@ -115,10 +115,10 @@ def fintech_data_pipeline():
         }
 
     # -------------------------------------------------------------------------
-    # Layer 3: DWH Core - Dimensions (Conformed Kimball Dims with xxhash64)
+    # Layer 3: Curated Core - Dimensions (Conformed Kimball Dims with xxhash64)
     # -------------------------------------------------------------------------
-    @task_group(group_id="dwh_kimball_dimensions", tooltip="Build conformed Kimball dimensions")
-    def dwh_dimensions_layer():
+    @task_group(group_id="curated_dimensions", tooltip="Build conformed Kimball dimensions")
+    def curated_dimensions_layer():
         return {
             "dim_bucket": build_spark_task("dim_delinquency_bucket", "curated", "curated_dim_delinquency_bucket.py"),
             "dim_cust": build_spark_task("dim_customer", "curated", "curated_dim_customer.py"),
@@ -130,10 +130,10 @@ def fintech_data_pipeline():
         }
 
     # -------------------------------------------------------------------------
-    # Layer 4: DWH Core - Facts (Constellation Fact Tables)
+    # Layer 4: Curated Core - Facts (Constellation Fact Tables)
     # -------------------------------------------------------------------------
-    @task_group(group_id="dwh_kimball_facts", tooltip="Build constellation fact tables with SK references")
-    def dwh_facts_layer():
+    @task_group(group_id="curated_facts", tooltip="Build constellation fact tables with SK references")
+    def curated_facts_layer():
         return {
             "fact_loan_app": build_spark_task("fact_loan_application", "curated", "curated_fact_loan_application.py"),
             "fact_monthly_loan": build_spark_task("fact_monthly_loan_snapshot", "curated", "curated_fact_monthly_loan_snapshot.py"),
@@ -152,11 +152,20 @@ def fintech_data_pipeline():
     )
 
     # -------------------------------------------------------------------------
+    # Layer 5b: Data Quality & Financial Reconciliation Gate
+    # -------------------------------------------------------------------------
+    reconciliation_quality_gate = build_spark_task(
+        "reconciliation_quality_gate",
+        "curated",
+        "reconciliation_audit.py",
+    )
+
+    # -------------------------------------------------------------------------
     # Layer 6: OLAP Serving Layer (ClickHouse MergeTree)
     # -------------------------------------------------------------------------
     sync_to_clickhouse = BashOperator(
         task_id="sync_to_clickhouse_olap",
-        bash_command="bash /opt/airflow/scripts/ops/sync_hdfs_to_clickhouse.sh",
+        bash_command="bash /opt/airflow/scripts/ops/sync_hdfs_to_clickhouse.sh ",
     )
 
     # -------------------------------------------------------------------------
@@ -171,7 +180,7 @@ def fintech_data_pipeline():
         >>> [SUCCESS] Data Pipeline Run Finished Successfully!
         >>> Date Interval: {ds}
         >>> Run ID: {run_id}
-        >>> Lineage (Raw -> Stage ODS -> DWH Core -> BI Mart -> ClickHouse) verified.
+        >>> Lineage (Raw -> Stage ODS -> Curated Core -> BI Mart -> DQ Gate -> ClickHouse) verified.
         ======================================================================
         """)
 
@@ -182,13 +191,14 @@ def fintech_data_pipeline():
     # =========================================================================
     raw = raw_layer()
     stage = stage_layer()
-    dims = dwh_dimensions_layer()
-    facts = dwh_facts_layer()
+    dims = curated_dimensions_layer()
+    facts = curated_facts_layer()
 
-    # Step 0 -> Raw Ingestion
+    # Step 0 -> Raw Ingestion & Standalone Dimensions
     cluster_healthcheck >> [
         raw["app_train"], raw["app_test"], raw["bureau"], raw["bureau_balance"],
-        raw["pos_cash"], raw["credit_card"], raw["installments"], raw["prev_app"]
+        raw["pos_cash"], raw["credit_card"], raw["installments"], raw["prev_app"],
+        dims["dim_bucket"], dims["dim_rel_time"]
     ]
 
     # Raw -> Stage 1-1 Lineage
@@ -201,19 +211,19 @@ def fintech_data_pipeline():
     raw["installments"] >> stage["installments"]
     raw["prev_app"] >> stage["prev_app"]
 
-    # Stage -> DWH Dimensions
+    # Stage -> Curated Dimensions
     [stage["app_train"], stage["app_test"]] >> dims["dim_cust"]
     stage["prev_app"] >> [dims["dim_prod"], dims["dim_chan"], dims["dim_dec"]]
     stage["bureau"] >> dims["dim_bureau_src"]
 
-    # Stage & Dims -> DWH Facts
+    # Stage & Dims -> Curated Facts
     [stage["app_train"], stage["app_test"], dims["dim_cust"], dims["dim_prod"], dims["dim_chan"], dims["dim_dec"]] >> facts["fact_loan_app"]
     [stage["pos_cash"], stage["credit_card"], dims["dim_bucket"]] >> facts["fact_monthly_loan"]
     stage["installments"] >> facts["fact_installment"]
     [stage["bureau"], dims["dim_bureau_src"]] >> facts["fact_bureau_cred"]
     stage["bureau_balance"] >> facts["fact_monthly_bureau"]
 
-    # DWH Core -> Data Mart (OBT 360)
+    # Curated Core -> Data Mart (OBT 360)
     [
         facts["fact_loan_app"],
         facts["fact_monthly_loan"],
@@ -223,8 +233,17 @@ def fintech_data_pipeline():
         dims["dim_dec"]
     ] >> mart_obt_360
 
-    # Mart -> OLAP ClickHouse -> Audit Summary
-    mart_obt_360 >> sync_to_clickhouse >> audit_summary
+    # Mart -> Data Quality Gate -> OLAP ClickHouse Serving
+    mart_obt_360 >> reconciliation_quality_gate >> sync_to_clickhouse
+
+    # Terminal Barrier: Pipeline completion audit summary gates on ALL branches
+    [
+        sync_to_clickhouse,
+        facts["fact_installment"],
+        facts["fact_bureau_cred"],
+        facts["fact_monthly_bureau"],
+        dims["dim_rel_time"],
+    ] >> audit_summary
 
 
-dag_instance = fintech_data_pipeline()
+dag_instance = risk_data_pipeline()

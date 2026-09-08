@@ -116,7 +116,7 @@ docker exec -it master python /scripts/ops/seed_postgres_from_csv.py
 
 ---
 
-### B. Running the Medallion Pipeline on YARN
+### B. Running the Data Pipeline on YARN (Raw -> Stage ODS -> DWH Core)
 
 All jobs adhere to standardized audit metadata: `_source_system`, `_processed_at`, `_batch_id`.
 
@@ -189,9 +189,9 @@ curl -s "http://clickhouse:8123/" --data-binary "
 
 ### E. Airflow Orchestration Operations
 - Access Airflow Webserver: [http://localhost:8080](http://localhost:8080) (`admin` / `admin`).
-- Trigger Fintech Pipeline DAG:
+- Trigger Risk Pipeline DAG:
 ```bash
-docker exec -it airflow-scheduler airflow dags trigger fintech_data_pipeline
+docker exec -it airflow-scheduler airflow dags trigger risk_data_pipeline
 ```
 - List active DAGs and verify import errors:
 ```bash

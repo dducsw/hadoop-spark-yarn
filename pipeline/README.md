@@ -1,6 +1,6 @@
 # Fintech Credit Risk Data Pipeline (Hadoop - Spark - YARN)
 
-> Enterprise Medallion Data Lakehouse architecture (Bronze -> Silver -> Gold) designed for credit scoring and loan portfolio risk analytics (Home Credit Default Risk dataset), running on a distributed **Apache Hadoop YARN & Apache Spark 3.5** cluster.
+> Enterprise Big Data Warehouse & Lakehouse architecture (Raw Landing -> Stage ODS -> DWH Kimball Core -> BI Mart OBT) designed for credit scoring and loan portfolio risk analytics (Home Credit Default Risk dataset), running on a distributed **Apache Hadoop YARN & Apache Spark 3.5** cluster.
 
 ---
 
@@ -11,6 +11,7 @@ pipeline/
 ├── config/                  # Environment parameters & HDFS path configs
 │   └── raw_config.py        # Mapping of source CSVs, Hive table names, PKs
 ├── dags/                    # Workflow orchestration with Apache Airflow
+│   ├── risk_data_pipeline.py    # Production DAG: Raw -> Stage ODS -> Curated Core -> Mart OBT -> Quality Gate -> ClickHouse
 │   └── demo_pipeline_dag.py # DAG orchestrating Spark jobs across the cluster
 ├── examples/                # Infrastructural reference implementations & demos
 │   ├── spark_hive_etl.py    # Hive Metastore integration demo
@@ -18,21 +19,22 @@ pipeline/
 │   └── wordcount.py         # Baseline cluster connectivity check
 ├── src/                     # Core pipeline source code
 │   ├── common/              # Shared infrastructure modules (OOP Template Method)
-│   │   ├── audit.py         # Centralized audit logging (pipeline_audit_log)
+│   │   ├── audit.py         # Centralized audit logging (pipeline_audit_log in PostgreSQL)
 │   │   ├── base_spark_job.py# Root abstract lifecycle: Extract -> Validate -> Transform -> Audit -> Load
-│   │   ├── base_raw_ingest.py # Base job for Raw (Bronze) layer
-│   │   ├── base_stage_job.py  # Base job for Stage (Silver) layer (dedup, null filtering)
-│   │   ├── base_curated_job.py# Base job for Curated (Gold) layer (feature engineering & marts)
+│   │   ├── base_raw_ingest.py # Base job for Raw Landing layer
+│   │   ├── base_stage_job.py  # Base job for Stage ODS layer (dedup, Decimal(18,2) casting)
+│   │   ├── base_curated_job.py# Base job for DWH Core & Mart layer (Kimball dims, facts, OBT)
 │   │   ├── logger.py        # Standardized timestamped logger
 │   │   ├── spark_session.py # Managed SparkSession optimized for YARN
 │   │   └── watermark.py     # Watermark tracker for incremental pipelines
-│   ├── jobs/                # 21 PySpark jobs organized by Medallion layer
-│   │   ├── raw/             # 8 Ingestion jobs (CSV -> Bronze Parquet on HDFS)
-│   │   ├── stage/           # 8 Cleaning jobs (Bronze -> Silver Parquet: explicit types, dedup)
-│   │   └── curated/         # 13 Dimensional Modeling & Mart jobs (Silver -> Gold Parquet):
-│   │       ├── curated_dim_*.py  # Conformed Dims & SCD4 (Customer, Loan Product, Delinquency Bucket,...)
+│   ├── jobs/                # PySpark batch jobs organized by DWH layer
+│   │   ├── raw/             # 8 Ingestion jobs (Source DB/CSV -> Raw Parquet on HDFS)
+│   │   ├── stage/           # 8 Cleaning jobs (Raw -> Stage ODS Hive tables: explicit types, dedup)
+│   │   └── curated/         # Dimensional Modeling & Mart jobs:
+│   │       ├── curated_dim_*.py  # Conformed Dims (Customer, Loan Product, Delinquency Bucket,...)
 │   │       ├── curated_fact_*.py # Constellation Facts (Loan Application, Monthly Loan Snapshot,...)
-│   │       └── curated_obt_loan_portfolio_360.py # Wide 360 Mart for BI & ML serving
+│   │       ├── curated_obt_loan_portfolio_360.py # Wide OBT Mart for BI & ML serving
+│   │       └── reconciliation_audit.py           # Financial reconciliation quality gate
 │   ├── schemas/             # Explicit PySpark schemas & Hive DDL strings
 │   │   ├── raw_schemas.py   # Explicit DDL & HDFS locations for Raw
 │   │   ├── stage_schemas.py # Explicit DDL & HDFS locations for Stage

@@ -1,9 +1,9 @@
 -- ====================================================================
--- STAGE (SILVER) LAYER DDL SCHEMAS (hive.stage_credit_risk)
+-- STAGE (ODS) LAYER DDL SCHEMAS (hive.stage_credit_risk)
 --
--- Enterprise Medallion Best Practice:
--- Cleaned, deduplicated, type-cast source entities preserving Natural Keys.
--- Conformed Dimensional Modeling (dim_*, fact_*) resides in Curated (Gold).
+-- DWH Best Practice:
+-- Cleaned, deduplicated, Decimal(18,2) type-cast source entities preserving Natural Keys.
+-- Conformed Dimensional Modeling (dim_*, fact_*) resides in DWH Core (Curated).
 -- ====================================================================
 
 CREATE DATABASE IF NOT EXISTS stage_credit_risk;

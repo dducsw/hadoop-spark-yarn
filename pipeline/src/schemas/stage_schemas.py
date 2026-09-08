@@ -1,8 +1,8 @@
-"""Spark SQL DDL Schema definitions for Stage (Silver) layer (hive.stage_credit_risk).
+"""Spark SQL DDL Schema definitions for Stage (ODS) layer (hive.stage_credit_risk).
 
-In accordance with Enterprise Medallion Lakehouse best practices:
-Stage tables are cleaned, type-cast, deduplicated copies of source entities preserving Natural Keys.
-Dimensional models (dim_*, fact_*) belong exclusively in the Curated (Gold) layer.
+In accordance with Enterprise DWH architecture best practices:
+Stage tables are cleaned, Decimal(18,2) type-cast, deduplicated copies of source entities preserving Natural Keys.
+Dimensional models (dim_*, fact_*) belong exclusively in the DWH Core (Curated) layer.
 """
 
 STAGE_DB_NAME = "stage_credit_risk"

@@ -32,7 +32,7 @@ This lab is structured to practice standard performance tuning and operational s
    - Decoupled Metastore architecture backed by PostgreSQL.
    - Managing external tables, schema evolution, and partition pruning.
 5. **Data Pipeline Orchestration (Apache Airflow 3.2.1)**:
-   - Scheduling & chaining end-to-end Medallion pipelines (Raw ➔ Stage ➔ Curated ➔ Serving).
+   - Scheduling & chaining end-to-end Big Data pipelines (Raw ➔ Stage ODS ➔ DWH Core ➔ Mart ➔ ClickHouse).
    - Managing DAG dependencies, automated retries, dynamic parameters, and cluster health monitoring.
 6. **Modern OLAP Serving (ClickHouse)**:
    - Offloading high-concurrency analytical queries from the data lake to ClickHouse.
@@ -101,9 +101,14 @@ make test
 # Option A: Execute via Spark Submit directly on Master
 docker exec master spark-submit --master yarn /pipeline/examples/spark_to_clickhouse_etl.py
 
-# Option B: Trigger Airflow Medallion Pipeline DAG
-docker compose exec airflow-scheduler airflow dags test demo_bigdata_pipeline
+# Option B: Trigger Airflow Risk Data Pipeline DAG
+docker exec airflow-scheduler airflow dags trigger risk_data_pipeline
 ```
+
+#### Airflow Pipeline Topology (`risk_data_pipeline`):
+<p align="center">
+  <img src="docs/images/dag.png" alt="Airflow Pipeline DAG Graph" width="100%" />
+</p>
 
 ### Step 5: Stop the Cluster
 ```bash
@@ -130,6 +135,8 @@ make clean
 
 ## 7. Additional Documentation
 
+- [Pipeline Architecture & Layer Design](docs/PIPELINE.md)
+- [Workflow Orchestration & Airflow 3 Guide](docs/ORCHESTRATION.md)
 - [Practice Plan & Data Lake Modeling (Home Credit)](docs/PLAN.md)
 - [Operations Runbook](docs/RUNBOOK.md)
 - [Architecture & Network Ports](docs/ARCHITECTURE.md)

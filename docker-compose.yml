@@ -56,6 +56,16 @@ services:
       timeout: 5s
       retries: 5
 
+  # Compatibility alias for IDEs / tools referencing legacy service name 'hive-db'
+  hive-db:
+    image: alpine:latest
+    container_name: hive-db-compat
+    command: ["echo", "hive-db is merged into postgres service"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # 3. ClickHouse OLAP Engine
   clickhouse:
     image: clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-24.3-alpine}
@@ -181,6 +191,8 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: 'true'
+      AIRFLOW__API__SECRET_KEY: 'tj3TRHkFNkiP/iGlq5lmxg=='
+      AIRFLOW__API_AUTH__JWT_SECRET: 'tj3TRHkFNkiP/iGlq5lmxg=='
       _AIRFLOW_WWW_USER_CREATE: 'true'
       _AIRFLOW_WWW_USER_USERNAME: admin
       _AIRFLOW_WWW_USER_PASSWORD: admin
@@ -210,10 +222,12 @@ services:
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+      AIRFLOW__API__SECRET_KEY: 'tj3TRHkFNkiP/iGlq5lmxg=='
+      AIRFLOW__API_AUTH__JWT_SECRET: 'tj3TRHkFNkiP/iGlq5lmxg=='
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: 'true'
       AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
     ports:
-      - "8080:8080"
+      - "${AIRFLOW_PORT:-8085}:8080"
     volumes:
       - ./pipeline/dags:/opt/airflow/dags
       - ./pipeline:/opt/airflow/pipeline
@@ -248,6 +262,9 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
       AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-webserver:8080/execution/'
+      AIRFLOW__API__SECRET_KEY: 'tj3TRHkFNkiP/iGlq5lmxg=='
+      AIRFLOW__API_AUTH__JWT_SECRET: 'tj3TRHkFNkiP/iGlq5lmxg=='
     volumes:
       - ./pipeline/dags:/opt/airflow/dags
       - ./pipeline:/opt/airflow/pipeline
@@ -282,6 +299,9 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
       AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-webserver:8080/execution/'
+      AIRFLOW__API__SECRET_KEY: 'tj3TRHkFNkiP/iGlq5lmxg=='
+      AIRFLOW__API_AUTH__JWT_SECRET: 'tj3TRHkFNkiP/iGlq5lmxg=='
     volumes:
       - ./pipeline/dags:/opt/airflow/dags
       - ./pipeline:/opt/airflow/pipeline

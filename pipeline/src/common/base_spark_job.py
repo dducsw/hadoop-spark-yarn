@@ -87,10 +87,6 @@ class BaseSparkJob(ABC):
         self.logger.info(
             f"Writing to Parquet: {self.target_path} | Mode: {self.write_mode.value} | Partitions: {self.partition_by}"
         )
-        row_count = df.count()
-        if row_count == 0:
-            self.logger.warning(f"Job Warning: 0 records to write for {self.target_table}")
-
         writer = df.write.format("parquet")
 
         if self.partition_by:
@@ -103,6 +99,15 @@ class BaseSparkJob(ABC):
             writer = writer.mode(self.write_mode.value)
 
         writer.save(self.target_path)
+
+        # Single-pass count: read directly from Parquet metadata footers (zero upstream recompute)
+        try:
+            row_count = spark.read.parquet(self.target_path).count()
+        except Exception:
+            row_count = 0
+
+        if row_count == 0:
+            self.logger.warning(f"Job Warning: 0 records to write for {self.target_table}")
 
         # Register Hive Metastore DDL
         self._register_hive_table(spark)
@@ -117,7 +122,10 @@ class BaseSparkJob(ABC):
             f"USING PARQUET LOCATION '{self.target_path}'"
         )
         if self.partition_by:
-            spark.sql(f"MSCK REPAIR TABLE {self.target_table}")
+            try:
+                spark.catalog.recoverPartitions(self.target_table)
+            except Exception:
+                spark.sql(f"MSCK REPAIR TABLE {self.target_table}")
         self.logger.info(f"Registered Hive table: {self.target_table}")
 
     def run(self) -> None:

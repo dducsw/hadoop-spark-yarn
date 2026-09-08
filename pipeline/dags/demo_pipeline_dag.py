@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Demo Airflow DAG: Big Data Medallion Pipeline Lifecycle
-Orchestrates Raw Ingestion -> Stage Transformation -> Curated Feature Mart -> ClickHouse OLAP Serving
+Demo Airflow DAG: Big Data DWH Pipeline Lifecycle (Raw -> Stage ODS -> Curated Mart -> ClickHouse)
 """
 from datetime import datetime, timedelta
 from airflow import DAG

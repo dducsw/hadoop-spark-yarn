@@ -1,44 +1,19 @@
-"""Pipeline Audit & Governance Logger."""
+"""Pipeline Audit & Governance Logger backed by PostgreSQL / RDBMS."""
+import os
+import sys
 import uuid
 from datetime import datetime
 from typing import Optional
 from pyspark.sql import SparkSession
-from pyspark.sql.types import (
-    DoubleType,
-    IntegerType,
-    LongType,
-    StringType,
-    StructField,
-    StructType,
-    TimestampType,
-)
 
-AUDIT_SCHEMA = StructType(
-    [
-        StructField("job_id", StringType(), False),
-        StructField("pipeline_layer", StringType(), False),
-        StructField("table_name", StringType(), False),
-        StructField("source_table", StringType(), True),
-        StructField("target_table", StringType(), True),
-        StructField("source_path", StringType(), True),
-        StructField("target_path", StringType(), True),
-        StructField("start_time", TimestampType(), False),
-        StructField("end_time", TimestampType(), False),
-        StructField("duration_sec", DoubleType(), False),
-        StructField("row_count", LongType(), True),
-        StructField("column_count", IntegerType(), True),
-        StructField("status", StringType(), False),
-        StructField("error_message", StringType(), True),
-    ]
-)
-
-AUDIT_TABLE_NAME = "pipeline_audit_log"
-AUDIT_DB_NAME = "metadata_db"
-AUDIT_HDFS_LOCATION = "/metadata/pipeline_audit_log"
+try:
+    from src.common.db_metadata import get_metadata_cursor
+except ImportError:
+    from db_metadata import get_metadata_cursor
 
 
 def log_pipeline_execution(
-    spark: SparkSession,
+    spark: Optional[SparkSession],
     pipeline_layer: str,
     table_name: str,
     source_table: str,
@@ -52,62 +27,40 @@ def log_pipeline_execution(
     column_count: Optional[int] = None,
     error_message: Optional[str] = None,
 ) -> None:
-    """Logs job run metrics into a centralized HDFS/Hive audit table."""
+    """Logs job run metrics into PostgreSQL/RDBMS metadata table (zero HDFS small-files)."""
     duration_sec = round((end_time - start_time).total_seconds(), 2)
-
-    audit_row = [
-        (
-            str(uuid.uuid4()),
-            pipeline_layer,
-            table_name,
-            source_table,
-            target_table,
-            source_path,
-            target_path,
-            start_time,
-            end_time,
-            float(duration_sec),
-            int(row_count) if row_count is not None else None,
-            int(column_count) if column_count is not None else None,
-            status,
-            str(error_message) if error_message else None,
-        )
-    ]
+    job_id = str(uuid.uuid4())
 
     try:
-        audit_df = spark.createDataFrame(audit_row, schema=AUDIT_SCHEMA)
-
-        # Append to HDFS Parquet
-        (
-            audit_df.write
-            .mode("append")
-            .format("parquet")
-            .save(AUDIT_HDFS_LOCATION)
-        )
-
-        # Ensure Hive Metadata Table exists
-        spark.sql(f"CREATE DATABASE IF NOT EXISTS {AUDIT_DB_NAME}")
-        spark.sql(
-            f"""
-            CREATE TABLE IF NOT EXISTS {AUDIT_DB_NAME}.{AUDIT_TABLE_NAME} (
-                job_id STRING,
-                pipeline_layer STRING,
-                table_name STRING,
-                source_table STRING,
-                target_table STRING,
-                source_path STRING,
-                target_path STRING,
-                start_time TIMESTAMP,
-                end_time TIMESTAMP,
-                duration_sec DOUBLE,
-                row_count BIGINT,
-                column_count INT,
-                status STRING,
-                error_message STRING
+        with get_metadata_cursor() as (cursor, backend):
+            placeholder = "%s" if backend == "postgres" else "?"
+            start_val = start_time.isoformat() if backend == "sqlite" and hasattr(start_time, "isoformat") else start_time
+            end_val = end_time.isoformat() if backend == "sqlite" and hasattr(end_time, "isoformat") else end_time
+            sql = f"""
+                INSERT INTO pipeline_audit_log (
+                    job_id, pipeline_layer, table_name, source_table, target_table,
+                    source_path, target_path, start_time, end_time, duration_sec,
+                    row_count, column_count, status, error_message
+                ) VALUES ({', '.join([placeholder] * 14)})
+            """
+            cursor.execute(
+                sql,
+                (
+                    job_id,
+                    pipeline_layer,
+                    table_name,
+                    source_table,
+                    target_table,
+                    source_path,
+                    target_path,
+                    start_val,
+                    end_val,
+                    float(duration_sec),
+                    int(row_count) if row_count is not None else None,
+                    int(column_count) if column_count is not None else None,
+                    status,
+                    str(error_message) if error_message else None,
+                ),
             )
-            USING PARQUET
-            LOCATION '{AUDIT_HDFS_LOCATION}'
-        """
-        )
     except Exception as e:
-        print(f"[AUDIT ERROR] Failed to write audit log: {e}")
+        print(f"[AUDIT ERROR] Failed to write audit log to database: {e}")
