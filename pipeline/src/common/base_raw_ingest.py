@@ -24,6 +24,14 @@ from src.common.base_spark_job import BaseSparkJob, WriteMode
 from src.common.spark_session import get_spark_session
 from src.common.watermark import get_watermark, update_watermark
 
+try:
+    from src.schemas.raw_schemas import RAW_CSV_SCHEMAS
+except ImportError:
+    try:
+        from schemas.raw_schemas import RAW_CSV_SCHEMAS
+    except ImportError:
+        RAW_CSV_SCHEMAS = {}
+
 
 class SourceType(str, Enum):
     CSV = "csv"
@@ -169,7 +177,12 @@ class BaseRawIngestJob(BaseSparkJob):
             .option("nullValue", "")
             .option("nanValue", "")
         )
-        df = reader.schema(self.schema).csv(self.csv_path) if self.schema else reader.option("inferSchema", "true").csv(self.csv_path)
+        resolved_schema = self.schema or RAW_CSV_SCHEMAS.get(self.table_name)
+        if resolved_schema:
+            df = reader.schema(resolved_schema).csv(self.csv_path)
+        else:
+            self.logger.warning(f"No explicit schema defined for {self.table_name}! Falling back to inferSchema.")
+            df = reader.option("inferSchema", "true").csv(self.csv_path)
 
         if last_wm and self.watermark_col in df.columns:
             self.logger.info(f"Filtering CSV incrementally with {self.watermark_col} > '{last_wm}'")
@@ -178,17 +191,11 @@ class BaseRawIngestJob(BaseSparkJob):
         return df
 
     def transform(self, df: DataFrame) -> DataFrame:
-        # Standardize column names to lowercase snake_case
-        for col in df.columns:
-            df = df.withColumnRenamed(col, col.lower())
+        # Standardize column names to lowercase snake_case in 1 single projection
+        df = df.toDF(*[col.lower() for col in df.columns])
         return self.add_audit_metadata(df)
 
     def load(self, spark: SparkSession, df: DataFrame) -> int:
-        row_count = df.count()
-        if row_count == 0:
-            self.logger.warning(f"0 records extracted from source for {self.target_table}.")
-            return 0
-
         first_run = False
         if self.load_type == LoadType.INCREMENTAL:
             last_wm = get_watermark(spark, self.table_name)
@@ -197,15 +204,33 @@ class BaseRawIngestJob(BaseSparkJob):
 
         write_mode = "overwrite" if (self.load_type == LoadType.FULL or first_run) else "append"
         self.logger.info(
-            f"Writing to HDFS Parquet: {self.target_path} | Mode: {write_mode} | Records: {row_count:,}"
+            f"Writing to HDFS Parquet: {self.target_path} | Mode: {write_mode}"
         )
 
-        (
-            df.write
-            .mode(write_mode)
-            .format("parquet")
-            .save(self.target_path)
-        )
+        if write_mode == "overwrite":
+            (
+                df.write
+                .mode(write_mode)
+                .format("parquet")
+                .save(self.target_path)
+            )
+            try:
+                row_count = spark.read.parquet(self.target_path).count()
+            except Exception:
+                row_count = 0
+        else:
+            df.persist()
+            (
+                df.write
+                .mode(write_mode)
+                .format("parquet")
+                .save(self.target_path)
+            )
+            row_count = df.count()
+            df.unpersist()
+
+        if row_count == 0:
+            self.logger.warning(f"0 records written to {self.target_table}.")
 
         self._register_hive_table(spark)
         return row_count
@@ -239,11 +264,19 @@ class BaseRawIngestJob(BaseSparkJob):
                     status="SUCCESS",
                 )
             else:
+                if self.watermark_col and self.watermark_col in df_out.columns:
+                    max_wm = df_out.select(F.max(self.watermark_col)).first()[0]
+                    last_wm_val = str(max_wm) if max_wm is not None else start_time.strftime("%Y-%m-%d %H:%M:%S")
+                    wm_col = self.watermark_col
+                else:
+                    last_wm_val = start_time.strftime("%Y-%m-%d %H:%M:%S")
+                    wm_col = "snapshot_timestamp"
+
                 update_watermark(
                     spark=spark,
                     table_name=self.table_name,
-                    watermark_column="snapshot_timestamp",
-                    last_watermark_value=start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    watermark_column=wm_col,
+                    last_watermark_value=last_wm_val,
                     status="SUCCESS",
                 )
         except Exception as e:

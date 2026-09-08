@@ -32,10 +32,8 @@ class StageBureauJob(BaseStageJob):
         )
 
     def transform(self, df: DataFrame) -> DataFrame:
-        """Casts amounts to Decimal(18,2), normalizes snake_case, trims strings, and filters null PKs."""
-        df_renamed = df
-        for col in df.columns:
-            df_renamed = df_renamed.withColumnRenamed(col, col.lower())
+        # Standardize columns to lowercase in single projection
+        df_renamed = df.toDF(*[col.lower() for col in df.columns])
 
         df_cleaned = (
             df_renamed

@@ -68,28 +68,37 @@ class ReconciliationAuditJob(BaseSparkJob):
         df_test: DataFrame,
         df_obt: DataFrame,
     ) -> DataFrame:
-        # 1. Null Checks on Primary Keys
-        null_train_pk = df_train.filter(F.col("sk_id_curr").isNull()).count()
-        null_test_pk = df_test.filter(F.col("sk_id_curr").isNull()).count()
-        null_obt_pk = df_obt.filter(F.col("sk_id_curr").isNull()).count()
+        # Single-pass aggregation per dataset: combines null PK check & sum(amt_credit)
+        train_stats = df_train.select(
+            F.count(F.when(F.col("sk_id_curr").isNull(), 1)).alias("null_pk"),
+            F.coalesce(F.sum("amt_credit"), F.lit(0)).alias("sum_credit"),
+        ).collect()[0]
+        null_train_pk = train_stats["null_pk"]
+        stage_train_sum = train_stats["sum_credit"] or Decimal("0.00")
+
+        test_stats = df_test.select(
+            F.count(F.when(F.col("sk_id_curr").isNull(), 1)).alias("null_pk"),
+            F.coalesce(F.sum("amt_credit"), F.lit(0)).alias("sum_credit"),
+        ).collect()[0]
+        null_test_pk = test_stats["null_pk"]
+        stage_test_sum = test_stats["sum_credit"] or Decimal("0.00")
+
+        obt_stats = df_obt.select(
+            F.count(F.when(F.col("sk_id_curr").isNull(), 1)).alias("null_pk"),
+            F.coalesce(
+                F.sum(F.when(F.col("is_current_application") == True, F.col("amt_credit"))),
+                F.lit(0),
+            ).alias("current_credit"),
+        ).collect()[0]
+        null_obt_pk = obt_stats["null_pk"]
+        obt_current_credit = obt_stats["current_credit"] or Decimal("0.00")
 
         if null_train_pk > 0 or null_test_pk > 0 or null_obt_pk > 0:
             raise ValueError(
                 f"Data Quality Violation: Null PK detected! Train: {null_train_pk}, Test: {null_test_pk}, OBT: {null_obt_pk}"
             )
 
-        # 2. Reconcile Monetary Amounts: Sum of amt_credit
-        stage_train_sum = df_train.select(F.sum("amt_credit")).collect()[0][0] or Decimal("0.00")
-        stage_test_sum = df_test.select(F.sum("amt_credit")).collect()[0][0] or Decimal("0.00")
         total_stage_credit = stage_train_sum + stage_test_sum
-
-        obt_current_credit = (
-            df_obt.filter(F.col("is_current_application") == True)
-            .select(F.sum("amt_credit"))
-            .collect()[0][0]
-            or Decimal("0.00")
-        )
-
         diff = abs(total_stage_credit - obt_current_credit)
         pct_diff = (float(diff) / float(total_stage_credit) * 100.0) if total_stage_credit > 0 else 0.0
 

@@ -216,3 +216,27 @@ RAW_ALL_DDLS = [
     RAW_PREVIOUS_APPLICATION_DDL,
     RAW_INSTALLMENTS_PAYMENTS_DDL,
 ]
+
+
+def extract_csv_schema_from_ddl(ddl: str) -> str:
+    """Extracts column definitions from DDL string excluding pipeline audit metadata columns."""
+    start = ddl.find("(") + 1
+    end = ddl.rfind(")")
+    cols = [
+        c.strip()
+        for c in ddl[start:end].split(",")
+        if c.strip() and not c.strip().startswith("_")
+    ]
+    return ", ".join(cols)
+
+
+RAW_CSV_SCHEMAS = {
+    "application_train": extract_csv_schema_from_ddl(RAW_APPLICATION_TRAIN_DDL),
+    "application_test": extract_csv_schema_from_ddl(RAW_APPLICATION_TEST_DDL),
+    "bureau": extract_csv_schema_from_ddl(RAW_BUREAU_DDL),
+    "bureau_balance": extract_csv_schema_from_ddl(RAW_BUREAU_BALANCE_DDL),
+    "pos_cash_balance": extract_csv_schema_from_ddl(RAW_POS_CASH_BALANCE_DDL),
+    "credit_card_balance": extract_csv_schema_from_ddl(RAW_CREDIT_CARD_BALANCE_DDL),
+    "previous_application": extract_csv_schema_from_ddl(RAW_PREVIOUS_APPLICATION_DDL),
+    "installments_payments": extract_csv_schema_from_ddl(RAW_INSTALLMENTS_PAYMENTS_DDL),
+}

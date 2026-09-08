@@ -50,7 +50,7 @@ This lab is structured to practice standard performance tuning and operational s
 | **`clickhouse`** | `8123` (HTTP), `9004` (Native TCP) | ClickHouse OLAP Server for real-time analytical queries |
 | **`hive-db`** | `5432` | PostgreSQL 15 RDBMS storing Hive Metastore schema |
 | **`zookeeper`** | `2181` | ZooKeeper 3.8 Cluster Coordinator |
-| **`airflow-webserver`** | `8080` | Apache Airflow 3.2.1 Web UI & API Server (FastAPI / React) |
+| **`airflow-webserver`** | `8085` | Apache Airflow 3.2.1 Web UI & API Server (FastAPI / React) |
 | **`airflow-scheduler`** | Internal | Apache Airflow 3.2.1 Pipeline Scheduler & Executor |
 | **`airflow-dag-processor`**| Internal | Apache Airflow 3.2.1 DAG Parser & Bundle Sync |
 | **`airflow-db`** | Internal | PostgreSQL 15 RDBMS for Airflow Metadata |
@@ -123,7 +123,7 @@ make clean
 
 ## 6. Web Interfaces
 
-- **Apache Airflow 3.2.1 UI**: [http://localhost:8080](http://localhost:8080) (`admin` / `admin`)
+- **Apache Airflow 3.2.1 UI**: [http://localhost:8085](http://localhost:8085) (`admin` / `admin`)
 - **JupyterLab (Interactive PySpark)**: [http://localhost:8888/lab](http://localhost:8888/lab)
 - **HDFS NameNode**: [http://localhost:9870](http://localhost:9870)
 - **YARN ResourceManager**: [http://localhost:8088](http://localhost:8088)
@@ -135,8 +135,10 @@ make clean
 
 ## 7. Additional Documentation
 
+- [Spark Engine & Pipeline Optimizations](docs/optimization/spark-pipeline-optimization.md)
 - [Pipeline Architecture & Layer Design](docs/PIPELINE.md)
 - [Workflow Orchestration & Airflow 3 Guide](docs/ORCHESTRATION.md)
+- [Platform Architecture Guides (Airflow, Spark, ClickHouse, Hadoop, Hive, YARN)](docs/platform/)
 - [Practice Plan & Data Lake Modeling (Home Credit)](docs/PLAN.md)
 - [Operations Runbook](docs/RUNBOOK.md)
 - [Architecture & Network Ports](docs/ARCHITECTURE.md)

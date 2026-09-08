@@ -99,6 +99,27 @@ class TestPipelineResilience(unittest.TestCase):
         self.assertIn("EXCHANGE TABLES", content)
         self.assertNotIn("TRUNCATE TABLE analytics.obt_loan_portfolio_360;", content)
 
+    def test_raw_csv_schemas_mapped_completely(self):
+        """Verify all 8 core raw tables have explicit non-empty schemas in RAW_CSV_SCHEMAS."""
+        from src.schemas.raw_schemas import RAW_CSV_SCHEMAS
+        expected_tables = [
+            "application_train",
+            "application_test",
+            "bureau",
+            "bureau_balance",
+            "pos_cash_balance",
+            "credit_card_balance",
+            "previous_application",
+            "installments_payments",
+        ]
+        for tbl in expected_tables:
+            self.assertIn(tbl, RAW_CSV_SCHEMAS)
+            schema_str = RAW_CSV_SCHEMAS[tbl]
+            self.assertIsInstance(schema_str, str)
+            self.assertGreater(len(schema_str), 10)
+            self.assertNotIn("_source_system", schema_str)
+            self.assertNotIn("_batch_id", schema_str)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -99,6 +99,7 @@ The platform implements an **Enterprise Data Warehouse (DWH) & Lakehouse archite
   2. **Financial Balance Reconciliation**: Verifies that total credit across OBT matches the raw stage application totals within a strict tolerance:
      $$\Delta(\sum \text{amt\_credit}) = \frac{|\sum \text{amt\_credit}_{\text{OBT}} - \sum \text{amt\_credit}_{\text{Stage}}|}{\sum \text{amt\_credit}_{\text{Stage}}} \le 0.01\%$$
   3. **Pipeline Circuit Breaker**: If discrepancy exceeds $0.01\%$, the job raises a non-zero exit code, immediately terminating the pipeline before corrupt data reaches the ClickHouse serving layer.
+  4. **Single-Pass Metric Aggregation**: Evaluates null PK checks and monetary sums in a single aggregation per dataset, halving I/O scans (see [Optimization Specification](optimization/spark-pipeline-optimization.md)).
 
 ### Layer 6: OLAP Serving Layer (ClickHouse MergeTree)
 - **Table**: `analytics.obt_loan_portfolio_360`

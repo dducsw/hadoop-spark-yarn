@@ -39,6 +39,7 @@ class BaseSparkJob(ABC):
         partition_by: Optional[List[str]] = None,
         source_system: str = "home_credit",
         batch_id: Optional[str] = None,
+        watermark_col: Optional[str] = None,
     ):
         self.pipeline_layer = pipeline_layer
         self.table_name = table_name
@@ -51,6 +52,7 @@ class BaseSparkJob(ABC):
         self.partition_by = partition_by or []
         self.source_system = source_system
         self.batch_id = batch_id or os.environ.get("BATCH_ID") or f"batch_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        self.watermark_col = watermark_col
         self.logger = get_logger(f"{pipeline_layer.upper()}_{table_name}")
 
     def add_audit_metadata(self, df: DataFrame) -> DataFrame:
@@ -98,13 +100,18 @@ class BaseSparkJob(ABC):
         else:
             writer = writer.mode(self.write_mode.value)
 
-        writer.save(self.target_path)
-
-        # Single-pass count: read directly from Parquet metadata footers (zero upstream recompute)
-        try:
-            row_count = spark.read.parquet(self.target_path).count()
-        except Exception:
-            row_count = 0
+        # Batch row count: Parquet footers for unpartitioned overwrite; persist+count for partitioned/append
+        if self.partition_by or self.write_mode != WriteMode.OVERWRITE:
+            df.persist()
+            writer.save(self.target_path)
+            row_count = df.count()
+            df.unpersist()
+        else:
+            writer.save(self.target_path)
+            try:
+                row_count = spark.read.parquet(self.target_path).count()
+            except Exception:
+                row_count = 0
 
         if row_count == 0:
             self.logger.warning(f"Job Warning: 0 records to write for {self.target_table}")
@@ -142,11 +149,25 @@ class BaseSparkJob(ABC):
             row_count = self.load(spark, df_out)
             status = "SUCCESS"
             self.logger.info(f"SUCCESS: Processed {row_count:,} rows ({col_count} cols) for {self.table_name}")
+
+            # Watermark Management: Event-time if watermark_col provided, fallback to execution timestamp
+            if self.watermark_col and self.watermark_col in df_out.columns:
+                max_wm = df_out.select(F.max(self.watermark_col)).collect()[0][0]
+                if max_wm is not None:
+                    last_wm_val = max_wm.strftime("%Y-%m-%d %H:%M:%S") if hasattr(max_wm, "strftime") else str(max_wm)
+                    wm_column = self.watermark_col
+                else:
+                    last_wm_val = start_time.strftime("%Y-%m-%d %H:%M:%S")
+                    wm_column = "execution_timestamp"
+            else:
+                last_wm_val = start_time.strftime("%Y-%m-%d %H:%M:%S")
+                wm_column = "execution_timestamp"
+
             update_watermark(
                 spark=spark,
                 table_name=self.table_name,
-                watermark_column="execution_timestamp",
-                last_watermark_value=start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                watermark_column=wm_column,
+                last_watermark_value=last_wm_val,
                 status="SUCCESS",
             )
         except Exception as e:
