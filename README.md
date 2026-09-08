@@ -37,6 +37,11 @@ This lab is structured to practice standard performance tuning and operational s
 6. **Modern OLAP Serving (ClickHouse)**:
    - Offloading high-concurrency analytical queries from the data lake to ClickHouse.
    - Designing MergeTree primary keys and partition strategies for sub-second dashboard queries.
+7. **Enterprise Data Governance & Protection**:
+   - Operating model aligned with DAMA-DMBOK, BCBS 239, and 4-tier data classification (L1–L4).
+   - Automated Dead-Letter Queue (DLQ) quarantine routing on HDFS (`/quarantine/credit_risk/*`).
+   - PII privacy protection (salted SHA-256 tokenization, string masking, income binning).
+   - Multi-tier quality control with financial balance reconciliation gate ($\Delta \le 0.01\%$).
 
 ---
 
@@ -135,6 +140,7 @@ make clean
 
 ## 7. Additional Documentation
 
+- [Enterprise Data Governance & Protection Specification](docs/GOVERNANCE.md)
 - [Spark Engine & Pipeline Optimizations](docs/optimization/spark-pipeline-optimization.md)
 - [Pipeline Architecture & Layer Design](docs/PIPELINE.md)
 - [Workflow Orchestration & Airflow 3 Guide](docs/ORCHESTRATION.md)
