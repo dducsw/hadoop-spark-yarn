@@ -65,7 +65,7 @@ def main():
     clickhouse_properties = {
         "driver": "com.clickhouse.jdbc.ClickHouseDriver",
         "user": "default",
-        "password": "clickhouse123"
+        "password": os.environ.get("CLICKHOUSE_PASSWORD", "")
     }
 
     try:

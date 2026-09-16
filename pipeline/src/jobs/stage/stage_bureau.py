@@ -31,11 +31,11 @@ class StageBureauJob(BaseStageJob):
             stage_db=stage_db,
         )
 
-    def transform(self, df: DataFrame) -> DataFrame:
+    def clean_and_cast(self, df: DataFrame) -> DataFrame:
         # Standardize columns to lowercase in single projection
         df_renamed = df.toDF(*[col.lower() for col in df.columns])
 
-        df_cleaned = (
+        return (
             df_renamed
             .withColumn("sk_id_bureau", F.col("sk_id_bureau").cast(IntegerType()))
             .withColumn("sk_id_curr", F.col("sk_id_curr").cast(IntegerType()))
@@ -55,7 +55,6 @@ class StageBureauJob(BaseStageJob):
             .withColumn("days_credit_update", F.col("days_credit_update").cast(IntegerType()))
             .withColumn("amt_annuity", F.col("amt_annuity").cast(DecimalType(18, 2)))
         )
-        return super().transform(df_cleaned)
 
 
 def main():

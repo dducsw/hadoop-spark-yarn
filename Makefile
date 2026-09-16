@@ -1,36 +1,41 @@
-.PHONY: help build up down restart ps logs bootstrap test status master clean
+.PHONY: help build up down restart ps logs bootstrap test status master clean gen-secrets test-unit
+
+# Docker Compose v2 (no hyphen) — v1 deprecated
+DC := docker compose
 
 help:
 	@echo "Big Data Platform CLI (Hadoop + YARN + Spark + Hive + ClickHouse + ZooKeeper)"
 	@echo "Available commands:"
 	@echo "  make build       - Build Unified Base Docker Image"
-	@echo "  make up          - Start all 6 cluster containers in background"
+	@echo "  make up          - Start all cluster containers in background"
 	@echo "  make down        - Stop cluster containers"
 	@echo "  make restart     - Restart all cluster services"
 	@echo "  make ps          - List running containers and statuses"
 	@echo "  make logs        - Tail output logs from all cluster containers"
 	@echo "  make bootstrap   - Initialize HDFS, Spark JARs, Hive DB & ClickHouse"
 	@echo "  make status      - Run health checks across all platform components"
-	@echo "  make test        - Run end-to-end 6-layer smoke test suite (HDFS, YARN, Spark, Hive, ClickHouse, Airflow)"
+	@echo "  make test        - Run end-to-end 6-layer smoke test suite"
+	@echo "  make test-unit   - Run unit tests locally (no cluster required)"
+	@echo "  make gen-secrets - Generate Airflow Fernet & Secret keys for .env"
 	@echo "  make master      - Open interactive bash shell inside Master node"
 	@echo "  make clean       - Stop containers and purge all persistent volumes"
 
 build:
-	docker-compose build
+	$(DC) build
 
 up:
-	docker-compose up -d
+	$(DC) up -d
 
 down:
-	docker-compose down
+	$(DC) down
 
 restart: down up
 
 ps:
-	docker-compose ps
+	$(DC) ps
 
 logs:
-	docker-compose logs -f
+	$(DC) logs -f
 
 bootstrap:
 	@echo "Running Bootstrap Pipeline..."
@@ -51,8 +56,17 @@ test:
 	docker exec -it master bash /scripts/tests/05-test-clickhouse.sh
 	docker exec -it airflow-scheduler bash /opt/airflow/scripts/tests/06-test-airflow.sh
 
+test-unit:
+	@echo "Running unit tests (no cluster required)..."
+	cd pipeline && python -m pytest test/ -v --tb=short
+
+gen-secrets:
+	@echo "=== Copy these into your .env file ==="
+	@python -c "from cryptography.fernet import Fernet; print('AIRFLOW_FERNET_KEY=' + Fernet.generate_key().decode())"
+	@python -c "import secrets; print('AIRFLOW_SECRET_KEY=' + secrets.token_urlsafe(32))"
+
 master:
 	docker exec -it master bash
 
 clean:
-	docker-compose down -v
+	$(DC) down -v

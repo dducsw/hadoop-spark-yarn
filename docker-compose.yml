@@ -38,7 +38,7 @@ services:
     environment:
       POSTGRES_DB: metastore
       POSTGRES_USER: hive
-      POSTGRES_PASSWORD: hivepassword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5433:5432"
     volumes:
@@ -56,15 +56,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Compatibility alias for IDEs / tools referencing legacy service name 'hive-db'
-  hive-db:
-    image: alpine:latest
-    container_name: hive-db-compat
-    command: ["echo", "hive-db is merged into postgres service"]
-    restart: "no"
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   # 3. ClickHouse OLAP Engine
   clickhouse:
@@ -75,7 +66,7 @@ services:
     environment:
       CLICKHOUSE_DB: analytics
       CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: clickhouse123
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     ports:
       - "8123:8123"   # HTTP REST / Web Interface
@@ -185,17 +176,17 @@ services:
     networks: [bigdata-net]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@postgres:5432/airflow
-      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: '${AIRFLOW_FERNET_KEY}'
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: 'true'
-      AIRFLOW__API__SECRET_KEY: 'tj3TRHkFNkiP/iGlq5lmxg=='
-      AIRFLOW__API_AUTH__JWT_SECRET: 'tj3TRHkFNkiP/iGlq5lmxg=='
+      AIRFLOW__API__SECRET_KEY: '${AIRFLOW_SECRET_KEY}'
+      AIRFLOW__API_AUTH__JWT_SECRET: '${AIRFLOW_SECRET_KEY}'
       _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: admin
-      _AIRFLOW_WWW_USER_PASSWORD: admin
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USERNAME:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
     volumes:
       - ./pipeline/dags:/opt/airflow/dags
       - ./pipeline:/opt/airflow/pipeline
@@ -217,13 +208,13 @@ services:
     networks: [bigdata-net]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@postgres:5432/airflow
-      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: '${AIRFLOW_FERNET_KEY}'
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-      AIRFLOW__API__SECRET_KEY: 'tj3TRHkFNkiP/iGlq5lmxg=='
-      AIRFLOW__API_AUTH__JWT_SECRET: 'tj3TRHkFNkiP/iGlq5lmxg=='
+      AIRFLOW__API__SECRET_KEY: '${AIRFLOW_SECRET_KEY}'
+      AIRFLOW__API_AUTH__JWT_SECRET: '${AIRFLOW_SECRET_KEY}'
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: 'true'
       AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
     ports:
@@ -256,15 +247,15 @@ services:
     networks: [bigdata-net]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@postgres:5432/airflow
-      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: '${AIRFLOW_FERNET_KEY}'
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
       AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-webserver:8080/execution/'
-      AIRFLOW__API__SECRET_KEY: 'tj3TRHkFNkiP/iGlq5lmxg=='
-      AIRFLOW__API_AUTH__JWT_SECRET: 'tj3TRHkFNkiP/iGlq5lmxg=='
+      AIRFLOW__API__SECRET_KEY: '${AIRFLOW_SECRET_KEY}'
+      AIRFLOW__API_AUTH__JWT_SECRET: '${AIRFLOW_SECRET_KEY}'
     volumes:
       - ./pipeline/dags:/opt/airflow/dags
       - ./pipeline:/opt/airflow/pipeline
@@ -293,15 +284,15 @@ services:
     networks: [bigdata-net]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflowpassword@postgres:5432/airflow
-      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: '${AIRFLOW_FERNET_KEY}'
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
       AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
       AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-webserver:8080/execution/'
-      AIRFLOW__API__SECRET_KEY: 'tj3TRHkFNkiP/iGlq5lmxg=='
-      AIRFLOW__API_AUTH__JWT_SECRET: 'tj3TRHkFNkiP/iGlq5lmxg=='
+      AIRFLOW__API__SECRET_KEY: '${AIRFLOW_SECRET_KEY}'
+      AIRFLOW__API_AUTH__JWT_SECRET: '${AIRFLOW_SECRET_KEY}'
     volumes:
       - ./pipeline/dags:/opt/airflow/dags
       - ./pipeline:/opt/airflow/pipeline
@@ -328,10 +319,10 @@ services:
     container_name: superset-init
     networks: [bigdata-net]
     environment:
-      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-SUPERSET_SECRET_KEY_FINTECH_BIGDATA_PLATFORM_SECURE_2026}
-      SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:supersetpassword@postgres:5432/superset
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:${POSTGRES_PASSWORD}@postgres:5432/superset
       SUPERSET_ADMIN_USERNAME: ${SUPERSET_ADMIN_USERNAME:-admin}
-      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:-admin}
+      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD}
       PYTHONPATH: /app/pythonpath:/app/superset_home/.local/lib/python3.10/site-packages
       SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
     volumes:
@@ -347,13 +338,15 @@ services:
 
   # 12. Apache Superset Web Application (BI & Analytics Dashboards)
   superset:
-    image: apache/superset:latest
+    build:
+      context: .
+      dockerfile: docker/superset/Dockerfile
     container_name: superset
     hostname: superset
     networks: [bigdata-net]
     environment:
-      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-SUPERSET_SECRET_KEY_FINTECH_BIGDATA_PLATFORM_SECURE_2026}
-      SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:supersetpassword@postgres:5432/superset
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:${POSTGRES_PASSWORD}@postgres:5432/superset
       PYTHONPATH: /app/pythonpath:/app/superset_home/.local/lib/python3.10/site-packages
       SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
     ports:
@@ -362,7 +355,7 @@ services:
       - ./config/superset:/app/pythonpath
       - ./scripts:/scripts
       - superset_home:/app/superset_home
-    command: ["/bin/sh", "-c", "pip install --user --no-cache-dir clickhouse-connect psycopg2-binary && /usr/bin/run-server.sh"]
+    command: ["/usr/bin/run-server.sh"]
     depends_on:
       superset-init:
         condition: service_completed_successfully
@@ -382,6 +375,5 @@ volumes:
   master_name_data:
   worker1_dn_data:
   worker2_dn_data:
-  airflow_db_data:
   airflow_logs:
   superset_home:

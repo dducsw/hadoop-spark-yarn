@@ -46,11 +46,15 @@ flowchart TD
 ## 2. Container Role Breakdown
 
 1. **`zookeeper`**: ZooKeeper 3.8 providing service discovery and cluster coordination.
-2. **`hive-db`**: PostgreSQL 15 relational storage for Hive & Spark SQL Metastore schemas.
+2. **`postgres`**: Unified PostgreSQL 15 multi-tenant database hosting catalogs for Hive Metastore (`metastore`), CRM source data (`source_crm`), Airflow 3 (`airflow`), and Superset (`superset`).
 3. **`clickhouse`**: ClickHouse 24.3-alpine C++ columnar OLAP engine for real-time analytics with sub-10ms query latency.
-4. **`master`**: Central controller hosting HDFS NameNode, YARN ResourceManager, JobHistoryServer, Hive Metastore, HiveServer2, Spark History Server, and interactive CLI tooling.
-5. **`worker1`**: Worker node running HDFS DataNode (storage blocks) and YARN NodeManager (container tasks).
-6. **`worker2`**: Second worker node enabling distributed replication and parallel computation.
+4. **`master`**: Central controller hosting HDFS NameNode, YARN ResourceManager, JobHistoryServer, Hive Metastore, HiveServer2, Spark History Server, and CLI tooling.
+5. **`worker1`**: Compute & storage worker running HDFS DataNode and YARN NodeManager.
+6. **`worker2`**: Second worker node enabling distributed block replication and parallel compute containers.
+7. **`airflow-webserver`**: Airflow 3 Web UI and decoupled FastAPI Execution API server.
+8. **`airflow-scheduler`**: Airflow 3 scheduler evaluating dependency graphs and dispatching tasks.
+9. **`airflow-dag-processor`**: Standalone daemon for isolated DAG parsing and bundle synchronization.
+10. **`superset`**: Apache Superset BI platform built from custom Dockerfile with pre-installed ClickHouse and Postgres drivers.
 
 ---
 
@@ -70,4 +74,16 @@ flowchart TD
 | **ClickHouse HTTP UI**| `clickhouse` | `8123` | HTTP | Web Query Client (`/play`) and REST API |
 | **ClickHouse Native TCP**| `clickhouse` | `9004` | TCP | Native protocol client connection |
 | **ZooKeeper Client** | `zookeeper` | `2181` | TCP | Client coordination port |
-| **PostgreSQL Database**| `hive-db` | `5432` | TCP | Metastore database connection |
+| **PostgreSQL Database**| `postgres` | `5433` (mapped from 5432) | TCP | Multi-tenant relational catalog |
+| **Airflow 3 Webserver**| `airflow-webserver` | `8085` (mapped from 8080) | HTTP | Web orchestration dashboard |
+| **Apache Superset** | `superset` | `8089` (mapped from 8088) | HTTP | Enterprise BI visualization dashboards |
+
+---
+
+## 4. Security & Cryptographic Architecture
+
+1. **Zero Hardcoded Secrets**: All passwords, API keys, and connection strings are injected at runtime from `.env` (template provided in `.env.example`).
+2. **Fernet Credential Encryption**: Airflow connection credentials and variable values stored in PostgreSQL are encrypted at rest using AES-128-CBC with PKCS7 padding (`AIRFLOW__CORE__FERNET_KEY`).
+3. **Execution API JWT Security**: Internal communication between Airflow TaskRunner processes and the API server requires cryptographically signed JWT tokens (`AIRFLOW__API_AUTH__JWT_SECRET`).
+4. **Secret Generation Automation**: `make gen-secrets` generates secure, URL-safe random tokens for immediate cluster provisioning.
+5. **Database Privilege Segregation**: Discrete database users (`hive`, `airflow`, `superset`) maintain isolated credentials and access boundaries.

@@ -24,6 +24,8 @@ metastore_db/
 derby.log
 spark-warehouse/
 *.inprogress
+.metadata/
+*.db
 
 # Logs
 *.log

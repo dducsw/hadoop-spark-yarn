@@ -14,7 +14,7 @@ SECRET_KEY = os.environ.get(
 # Metadata Database (PostgreSQL)
 SQLALCHEMY_DATABASE_URI = os.environ.get(
     "SQLALCHEMY_DATABASE_URI",
-    "postgresql+psycopg2://superset:supersetpassword@postgres:5432/superset",
+    "postgresql+psycopg2://superset:changeme@postgres:5432/superset",
 )
 
 # Local Development conveniences

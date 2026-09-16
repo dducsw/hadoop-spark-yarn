@@ -4,6 +4,7 @@ Production Airflow DAG: Credit Risk Data Pipeline (risk_data_pipeline)
 Orchestrates: Raw Landing -> Stage ODS -> Curated Core (Kimball Dims/Facts) -> Data Mart (OBT 360) -> OLAP Serving (ClickHouse)
 Standard: Zero-top-level compute, TaskFlow API, fine-grained lineage, deterministic batch_id, and terminal barrier.
 """
+import os
 from datetime import datetime, timedelta
 from typing import Dict, Any
 
@@ -21,13 +22,13 @@ def on_failure_alert(context: Dict[str, Any]) -> None:
     exec_date = context.get("logical_date") or context.get("data_interval_start") or context.get("execution_date")
     error = context.get("exception")
     log_url = context.get("task_instance").log_url
+
     print(f"""
     ======================================================================
-    [ALERT] Pipeline Failure Detected!
-    DAG: {dag_id} | Task: {task_id}
+    [TASK FAILED] {dag_id} / {task_id}
     Execution Date: {exec_date}
+    Error: {error}
     Log URL: {log_url}
-    Error Details: {error}
     ======================================================================
     """)
 

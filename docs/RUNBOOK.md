@@ -17,16 +17,28 @@ Step-by-step procedures for initializing, operating, testing, and troubleshootin
 
 ## 2. Cluster Lifecycle Operations
 
-### Building the Base Image
+### Environment & Secrets Setup (First-time)
+Before starting the cluster for the first time, generate strong random cryptographic keys and database secrets into your `.env` file:
+```bash
+# 1. Copy template if not already present:
+cp .env.example .env
+
+# 2. Generate secure Airflow Fernet key & Secret key:
+make gen-secrets
+# Paste the generated keys and custom passwords into .env
+```
+
+### Building Container Images
 ```bash
 make build
-# or: docker-compose build
+# or: docker compose build
 ```
+*Note: Apache Superset is built using a custom image (`docker/superset/Dockerfile`) with database drivers (`clickhouse-connect`, `psycopg2-binary`) pre-installed at build time.*
 
 ### Starting the Cluster
 ```bash
 make up
-# or: docker-compose up -d
+# or: docker compose up -d
 ```
 *Allow 30-45 seconds for ZooKeeper, PostgreSQL, NameNode, ResourceManager, Hive Metastore, and ClickHouse to become healthy.*
 
@@ -42,9 +54,11 @@ make bootstrap
 ```bash
 # Stop containers (preserves volume data):
 make down
+# or: docker compose down
 
 # Purge all containers, networks, and persistent data volumes:
 make clean
+# or: docker compose down -v
 ```
 
 ---
@@ -81,6 +95,17 @@ The test runner validates:
 3. **PySpark on YARN**: Distributed DataFrame computation and Parquet write/read on HDFS.
 4. **Spark SQL & Hive Catalog**: Shared catalog table creation and querying.
 5. **ClickHouse OLAP**: Sub-10ms query execution and latency benchmarking.
+6. **Airflow 3**: Scheduler, Webserver, and DAG parsing verification.
+
+### Run Local Unit Tests (No Cluster Required)
+To run fast unit tests verifying PySpark schemas, casting, deduplication, and reconciliation logic:
+```bash
+# Run locally or inside master container:
+make test-unit
+
+# Or directly in master container:
+docker exec master python3 /pipeline/test/test_stage_transforms.py
+```
 
 ---
 
@@ -93,11 +118,11 @@ make master
 ```
 
 ### A. PostgreSQL Multi-Tenant OLTP Database Operations
-The unified `postgres` container hosts 4 isolated databases:
-- `metastore` (User: `hive`, Pwd: `hivepassword`) - Hive Metastore catalog.
-- `source_crm` (User: `hive`, Pwd: `hivepassword`) - Home Credit OLTP source database.
-- `airflow` (User: `airflow`, Pwd: `airflowpassword`) - Airflow 3 metadata catalog.
-- `superset` (User: `superset`, Pwd: `supersetpassword`) - Apache Superset metadata catalog.
+The unified `postgres` container hosts 4 isolated databases, secured by passwords configured in `.env`:
+- `metastore` (User: `hive`, Password: `${POSTGRES_PASSWORD}`) - Hive Metastore catalog.
+- `source_crm` (User: `hive`, Password: `${POSTGRES_PASSWORD}`) - Home Credit OLTP source database.
+- `airflow` (User: `airflow`, Password: `${POSTGRES_PASSWORD}`) - Airflow 3 metadata catalog.
+- `superset` (User: `superset`, Password: `${POSTGRES_PASSWORD}`) - Apache Superset metadata catalog.
 
 #### 1. Inspect PostgreSQL databases via psql:
 ```bash

@@ -38,7 +38,7 @@ class DatabaseConfig(BaseModel):
     host: str = Field(default="localhost", description="PostgreSQL Host")
     port: int = Field(default=5433, description="PostgreSQL Host Port")
     user: str = Field(default="hive", description="Username")
-    password: str = Field(default="hivepassword", description="Password")
+    password: str = Field(default=os.environ.get("POSTGRES_PASSWORD", ""), description="Password")
     database: str = Field(default="source_crm", description="Database Name")
     pool_size: int = Field(default=10, description="Connection pool size")
 
@@ -223,7 +223,7 @@ def main():
     parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int, default=5433)
     parser.add_argument("--user", type=str, default="hive")
-    parser.add_argument("--password", type=str, default="hivepassword")
+    parser.add_argument("--password", type=str, default=os.environ.get("POSTGRES_PASSWORD", ""))
     parser.add_argument("--database", type=str, default="source_crm")
     parser.add_argument("--input-dir", type=str, default="data/home-credit-default-risk")
     parser.add_argument("--tables", type=str, default=None, help="Comma-separated table names to seed")

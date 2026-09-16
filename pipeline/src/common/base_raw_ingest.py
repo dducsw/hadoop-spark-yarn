@@ -52,9 +52,9 @@ def parse_connection_string(conn_str: Optional[str]) -> dict:
       - postgres:5432/database
     """
     default_cfg = {
-        "url": "jdbc:postgresql://postgres:5432/source_crm",
-        "user": "hive",
-        "password": "hivepassword",
+        "url": os.environ.get("JDBC_URL", "jdbc:postgresql://postgres:5432/source_crm"),
+        "user": os.environ.get("JDBC_USER", "hive"),
+        "password": os.environ.get("JDBC_PASSWORD", ""),
         "driver": "org.postgresql.Driver",
     }
     if not conn_str:
@@ -207,27 +207,16 @@ class BaseRawIngestJob(BaseSparkJob):
             f"Writing to HDFS Parquet: {self.target_path} | Mode: {write_mode}"
         )
 
-        if write_mode == "overwrite":
-            (
-                df.write
-                .mode(write_mode)
-                .format("parquet")
-                .save(self.target_path)
-            )
-            try:
-                row_count = spark.read.parquet(self.target_path).count()
-            except Exception:
-                row_count = 0
-        else:
-            df.persist()
-            (
-                df.write
-                .mode(write_mode)
-                .format("parquet")
-                .save(self.target_path)
-            )
-            row_count = df.count()
-            df.unpersist()
+        # Always persist first so count() reads from cache — avoids a second full disk scan
+        df.persist()
+        (
+            df.write
+            .mode(write_mode)
+            .format("parquet")
+            .save(self.target_path)
+        )
+        row_count = df.count()
+        df.unpersist()
 
         if row_count == 0:
             self.logger.warning(f"0 records written to {self.target_table}.")
@@ -300,3 +289,4 @@ class BaseRawIngestJob(BaseSparkJob):
                 column_count=col_count,
                 error_message=error_msg,
             )
+            spark.stop()

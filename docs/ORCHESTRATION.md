@@ -37,22 +37,28 @@ In Airflow 3 (`apache/airflow:3.2.1`), the execution architecture is redesigned 
 
 ## 2. Security & Execution API Authentication
 
-### JWT Secret Requirement (`[api_auth] jwt_secret`):
-Because the TaskRunner communicates with the Execution API over HTTP, each request is signed with a JWT token.
-- When `AIRFLOW__API_AUTH__JWT_SECRET` is unset, both the scheduler and webserver generate independent, ephemeral random keys in memory upon container boot.
-- When a task runner attempts to report back to the API server, signature verification fails with:
+### JWT Secret Requirement (`[api_auth] jwt_secret`) & Fernet Encryption:
+Because the TaskRunner communicates with the Execution API over HTTP, each request is signed with a JWT token. Additionally, sensitive connection credentials and variables stored in the database are encrypted using Fernet cryptography (`AIRFLOW__CORE__FERNET_KEY`).
+- When `AIRFLOW__API_AUTH__JWT_SECRET` is unset, both the scheduler and webserver generate independent, ephemeral random keys in memory upon container boot, causing:
   ```text
   airflow.sdk.api.client.ServerResponseError: Invalid auth token: Signature verification failed
   ```
+- When `AIRFLOW__CORE__FERNET_KEY` is empty, connection passwords in the metadata database remain unencrypted.
 
-### Production Configuration in `docker-compose.yml`:
-An identical, persistent secret is mounted across all Airflow containers:
+### Production Environment Configuration:
+All secrets are dynamically injected from `.env` (generated via `make gen-secrets`):
 ```yaml
 environment:
   AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-webserver:8080/execution/'
-  AIRFLOW__API__SECRET_KEY: 'tj3TRHkFNkiP/iGlq5lmxg=='
-  AIRFLOW__API_AUTH__JWT_SECRET: 'tj3TRHkFNkiP/iGlq5lmxg=='
+  AIRFLOW__CORE__FERNET_KEY: '${AIRFLOW_FERNET_KEY}'
+  AIRFLOW__API__SECRET_KEY: '${AIRFLOW_SECRET_KEY}'
+  AIRFLOW__API_AUTH__JWT_SECRET: '${AIRFLOW_SECRET_KEY}'
 ```
+
+### Failure Callback & Inspection:
+The DAG default arguments configure `on_failure_callback = on_failure_alert`:
+- **Direct Log Diagnostic**: When any task fails, the callback immediately captures and prints the DAG ID, Task ID, execution date, exception message, and exact log URL to the stdout stream for rapid inspection without external service dependencies.
+- **Circuit-Breaker**: Downstream branches halt immediately upon upstream failure, avoiding corrupted writes to Curated or Serving layers.
 
 ---
 

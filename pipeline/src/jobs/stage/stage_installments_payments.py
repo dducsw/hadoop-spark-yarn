@@ -36,11 +36,11 @@ class StageInstallmentsPaymentsJob(BaseStageJob):
             stage_db=stage_db,
         )
 
-    def transform(self, df: DataFrame) -> DataFrame:
+    def clean_and_cast(self, df: DataFrame) -> DataFrame:
         # Standardize columns to lowercase in single projection
         df_renamed = df.toDF(*[col.lower() for col in df.columns])
 
-        df_cleaned = (
+        return (
             df_renamed
             .filter(F.col("sk_id_prev").isNotNull() & F.col("num_instalment_number").isNotNull())
             .withColumn("sk_id_prev", F.col("sk_id_prev").cast(IntegerType()))
@@ -71,7 +71,6 @@ class StageInstallmentsPaymentsJob(BaseStageJob):
                 F.when(F.col("amt_underpayment") > 0, F.lit(1)).otherwise(F.lit(0)),
             )
         )
-        return super().transform(df_cleaned)
 
 
 def main():

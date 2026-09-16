@@ -1,5 +1,6 @@
 """Base Stage (Silver) Cleaning, Standardizing & DLQ Quarantine Job template."""
 import os, sys
+from abc import abstractmethod
 from typing import List, Optional
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
@@ -52,6 +53,14 @@ class BaseStageJob(BaseSparkJob):
         self.logger.info(f"Reading Raw Parquet from {self.source_path}")
         return spark.read.parquet(self.source_path)
 
+    @abstractmethod
+    def clean_and_cast(self, df: DataFrame) -> DataFrame:
+        """Subclasses MUST override: cast column types, coalesce nulls, trim strings.
+        The base class handles dedup, null-PK filtering, quarantine, and audit metadata.
+        Do NOT call super().transform() here — just return the cast DataFrame.
+        """
+        pass
+
     def route_quarantine(self, df_rejected: DataFrame) -> None:
         """Saves malformed/duplicate records to Dead-Letter Queue (DLQ) for audit."""
         try:
@@ -71,18 +80,19 @@ class BaseStageJob(BaseSparkJob):
             self.logger.error(f"DLQ Quarantine routing error: {e}")
 
     def transform(self, df: DataFrame) -> DataFrame:
-        df_tagged = df
+        # 1. Type casting & cleansing — subclass responsibility via clean_and_cast()
+        df_cast = self.clean_and_cast(df)
 
-        # 1. Flag null primary keys
-        if self.primary_key and self.primary_key in df_tagged.columns:
-            df_tagged = df_tagged.withColumn(
+        # 2. Flag null primary keys
+        if self.primary_key and self.primary_key in df_cast.columns:
+            df_tagged = df_cast.withColumn(
                 "_is_null_pk",
                 F.when(F.col(self.primary_key).isNull(), True).otherwise(False),
             )
         else:
-            df_tagged = df_tagged.withColumn("_is_null_pk", F.lit(False))
+            df_tagged = df_cast.withColumn("_is_null_pk", F.lit(False))
 
-        # 2. Flag duplicates using window ranking
+        # 3. Flag duplicates using window ranking
         if self.dedup_cols:
             valid_cols = [c for c in self.dedup_cols if c in df_tagged.columns]
             if valid_cols:
@@ -98,7 +108,7 @@ class BaseStageJob(BaseSparkJob):
         else:
             df_tagged = df_tagged.withColumn("_row_num", F.lit(1))
 
-        # 3. Classify reject reasons
+        # 4. Classify reject reasons
         df_tagged = df_tagged.withColumn(
             "_reject_reason",
             F.when(F.col("_is_null_pk"), F.lit("NULL_PRIMARY_KEY"))
@@ -117,8 +127,8 @@ class BaseStageJob(BaseSparkJob):
             .drop("_is_null_pk", "_row_num")
         )
 
-        # 4. Route bad records to DLQ Quarantine Zone
+        # 5. Route bad records to DLQ Quarantine Zone
         self.route_quarantine(df_rejected)
 
-        # 5. Add standardized metadata audit columns
+        # 6. Add standardized metadata audit columns
         return self.add_audit_metadata(df_clean)

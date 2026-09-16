@@ -54,11 +54,18 @@ The platform implements an **Enterprise Data Warehouse (DWH) & Lakehouse archite
 ### Layer 2: Stage / ODS (Operational Data Store)
 - **Hive Database**: `stage_credit_risk`
 - **Location**: `/stage/credit_risk/<table_name>/`
-- **Core Transformations**:
-  - Deduplication on source Natural Keys using Spark Window functions (`ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ...)`).
-  - Explicit schema casting: Strings to `Decimal(18,2)`, dates to ISO strings / integers.
-  - Basic quality cleansing: trimming strings, standardizing gender/marital codes.
-  - Partition registration via `spark.catalog.recoverPartitions()` avoiding slow metastore locks.
+- **DLQ Quarantine Zone**: `/quarantine/credit_risk/<table_name>/`
+- **Template Method Contract (`BaseStageJob`)**:
+  - Subclasses MUST implement `@abstractmethod clean_and_cast(df: DataFrame) -> DataFrame`: Performs explicit schema casting (strings $\rightarrow$ `Decimal(18,2)` or `FloatType`), trimming strings, and standardizing codes. Subclasses do not need to call `super()`.
+  - Base class orchestrates the complete governance flow in `transform()`:
+    1. Calls `clean_and_cast()` from subclass.
+    2. Flags records with `NULL` primary keys (`_is_null_pk`).
+    3. Ranks duplicates with Spark Window functions (`ROW_NUMBER() OVER (PARTITION BY pk ORDER BY ...)`).
+    4. Routes invalid/duplicate records to **Dead-Letter Queue (DLQ)** at `/quarantine/credit_risk/*` with rejection reason and timestamp for audit inspection.
+    5. Appends standardized audit metadata columns (`_source_system`, `_processed_at`, `_batch_id`) to clean output.
+- **Resource Management & Lifecycle**:
+  - All jobs guarantee distributed cleanup by executing `spark.stop()` inside a `finally` block, preventing container leaks on YARN.
+  - Overwrite write operations persist the DataFrame in memory before writing to disk, computing accurate row counts from cache without triggering a second full disk scan.
 
 ### Layer 3: Curated Core - Dimensions (Kimball Bus Architecture)
 - **Hive Database**: `credit_risk`

@@ -101,18 +101,11 @@ class BaseSparkJob(ABC):
         else:
             writer = writer.mode(self.write_mode.value)
 
-        # Batch row count: Parquet footers for unpartitioned overwrite; persist+count for partitioned/append
-        if self.partition_by or self.write_mode != WriteMode.OVERWRITE:
-            df.persist()
-            writer.save(self.target_path)
-            row_count = df.count()
-            df.unpersist()
-        else:
-            writer.save(self.target_path)
-            try:
-                row_count = spark.read.parquet(self.target_path).count()
-            except Exception:
-                row_count = 0
+        # Always persist before write so count() reads from cache — no second disk scan
+        df.persist()
+        writer.save(self.target_path)
+        row_count = df.count()
+        df.unpersist()
 
         if row_count == 0:
             self.logger.warning(f"Job Warning: 0 records to write for {self.target_table}")

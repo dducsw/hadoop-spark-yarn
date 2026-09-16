@@ -31,11 +31,11 @@ class StageApplicationTestJob(BaseStageJob):
             stage_db=stage_db,
         )
 
-    def transform(self, df: DataFrame) -> DataFrame:
+    def clean_and_cast(self, df: DataFrame) -> DataFrame:
         # Standardize columns to lowercase in single projection
         df_renamed = df.toDF(*[col.lower() for col in df.columns])
 
-        df_cleaned = (
+        return (
             df_renamed
             .withColumn("sk_id_curr", F.col("sk_id_curr").cast(IntegerType()))
             .withColumn("target", F.lit(None).cast(IntegerType()))
@@ -61,7 +61,6 @@ class StageApplicationTestJob(BaseStageJob):
             .withColumn("ext_source_2", F.col("ext_source_2").cast(FloatType()))
             .withColumn("ext_source_3", F.col("ext_source_3").cast(FloatType()))
         )
-        return super().transform(df_cleaned)
 
 
 def main():
