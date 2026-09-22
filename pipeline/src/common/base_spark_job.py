@@ -16,7 +16,7 @@ sys.path.extend([SRC_DIR, PROJECT_DIR])
 from src.common.audit import log_pipeline_execution
 from src.common.logger import get_logger
 from src.common.spark_session import get_spark_session
-from src.common.watermark import update_watermark
+from src.common.watermark import get_watermark, update_watermark
 
 
 class WriteMode(str, Enum):
@@ -40,6 +40,7 @@ class BaseSparkJob(ABC):
         source_system: str = "home_credit",
         batch_id: Optional[str] = None,
         watermark_col: Optional[str] = None,
+        persist_before_write: bool = False,
     ):
         self.pipeline_layer = pipeline_layer
         self.table_name = table_name
@@ -53,8 +54,13 @@ class BaseSparkJob(ABC):
         self.source_system = source_system
         self.batch_id = batch_id or os.environ.get("BATCH_ID") or f"batch_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
         self.watermark_col = watermark_col
+        self.persist_before_write = persist_before_write
         self.rejected_count = 0
         self.logger = get_logger(f"{pipeline_layer.upper()}_{table_name}")
+
+    def get_last_watermark(self, spark: SparkSession) -> Optional[str]:
+        """Fetch previously committed watermark value for incremental filtering."""
+        return get_watermark(spark, self.table_name)
 
     def add_audit_metadata(self, df: DataFrame) -> DataFrame:
         """Standardize audit columns across all layers: _source_system, _processed_at, _batch_id."""
@@ -101,11 +107,18 @@ class BaseSparkJob(ABC):
         else:
             writer = writer.mode(self.write_mode.value)
 
-        # Always persist before write so count() reads from cache — no second disk scan
-        df.persist()
-        writer.save(self.target_path)
-        row_count = df.count()
-        df.unpersist()
+        # Configurable persistence strategy to avoid memory exhaustion on large datasets
+        if self.persist_before_write:
+            df.persist()
+            writer.save(self.target_path)
+            row_count = df.count()
+            df.unpersist()
+        else:
+            writer.save(self.target_path)
+            try:
+                row_count = spark.read.parquet(self.target_path).count()
+            except Exception:
+                row_count = df.count()
 
         if row_count == 0:
             self.logger.warning(f"Job Warning: 0 records to write for {self.target_table}")

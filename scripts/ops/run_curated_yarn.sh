@@ -19,9 +19,6 @@ run_curated_job() {
     spark-submit \
         --master yarn \
         --deploy-mode client \
-        --conf spark.yarn.maxAppAttempts=1 \
-        --conf spark.sql.shuffle.partitions=4 \
-        --conf spark.default.parallelism=4 \
         "${full_path}"
     echo ">>> Completed: ${script}"
 }

@@ -23,8 +23,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PySpark & Python dependencies
-RUN pip3 install --no-cache-dir pyspark==3.5.4 pandas pyarrow jupyterlab findspark
+# Install PySpark & Python dependencies (pinned versions for reproducibility)
+RUN pip3 install --no-cache-dir \
+    pyspark==3.5.4 \
+    pandas==2.2.2 \
+    pyarrow==15.0.2 \
+    jupyterlab==4.2.0 \
+    findspark==2.0.1 \
+    psycopg2-binary==2.9.9 \
+    cryptography==42.0.8
 
 # Versions
 ARG HADOOP_VERSION=3.4.3

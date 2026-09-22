@@ -16,7 +16,7 @@ This project provides a practical sandbox for hands-on learning, architectural c
 
 ## 2. Core Practice & Optimization Areas
 
-Engineering patterns and measured benchmark observations on this cluster:
+Engineering patterns and measured benchmark observations on this cluster (*Testbed: Home Credit dataset ~600MB uncompressed, 2 YARN Worker containers @ 2.25GB RAM / 1.5 CPUs each, Docker Compose V2 on WSL2*):
 
 ### 1. HDFS Storage & Partitioning
 - **Mechanism**: Snappy-compressed Parquet with dynamic partition overwrites (`spark.sql.sources.partitionOverwriteMode=dynamic`) and runtime partition coalescing via Adaptive Query Execution (AQE).
@@ -37,13 +37,13 @@ Engineering patterns and measured benchmark observations on this cluster:
 
 ### 3. Spark Engine & Distributed Compute Optimizations
 - **Mechanism**:
-  - **Broadcast Hash Joins**: Conformed dimensions (`dim_customer`, `dim_loan_product`, etc.) are explicitly broadcasted during fact table construction via `F.broadcast()`, completely eliminating expensive shuffle exchanges across executors.
+  - **Hybrid Broadcast & Dynamic Joins**: Bounded lookup dimensions (`dim_loan_product`, `dim_merchant_channel`, `dim_application_decision`, etc.) are explicitly broadcasted via `F.broadcast()`, while large customer dimensions are managed dynamically by AQE (`spark.sql.adaptive.enabled=true`) to avoid executor memory pressure.
   - **Distributed Surrogate Key Resolution (`xxhash64`)**: Generates deterministic 64-bit surrogate keys locally on executors using `F.xxhash64(natural_key)` instead of sequential `monotonically_increasing_id()` or database auto-increment sequences, removing all distributed coordination locks.
   - **Plan Flattening**: Single-projection lowercasing via `df.toDF(*[c.lower() for c in df.columns])` replacing iterative $O(N)$ column renaming loops.
   - **Single-Pass Metric Aggregation**: Combines data quality assertions (null PK checks) and monetary sums into a single `.select()` action per dataset.
-  - **Persist-and-Count Strategy**: Caches DataFrames in memory prior to disk writes (`df.persist()`), allowing audit row counts to be computed from memory rather than re-reading Parquet files from HDFS.
+  - **Configurable Persistence Strategy**: Selective DataFrame persistence (`persist_before_write=False` by default) with Parquet metadata row-counting, caching only when multiple downstream actions strictly demand it.
   - **Strict Decimal Precision**: Enforces `Decimal(18,2)` across monetary columns (`amt_credit`, `amt_balance`, `amt_payment`) to eliminate binary floating-point drift.
-  - **Adaptive Query Execution (AQE)**: `spark.sql.adaptive.coalescePartitions.enabled=true` automatically merges small post-shuffle partitions at runtime.
+  - **Adaptive Query Execution (AQE)**: `spark.sql.adaptive.coalescePartitions.enabled=true` automatically merges small post-shuffle partitions at runtime without hardcoded static partition counts.
 - **Observed Result**:
   - Catalyst AST depth reduced from 122 levels to 1 on `application_train`, eliminating JVM optimizer delays.
   - Halved audit scan passes (from 6 to 3) during financial balance reconciliation.
@@ -98,7 +98,7 @@ Engineering patterns and measured benchmark observations on this cluster:
 
 ## 4. Resource Allocation & Limits
 
-Configured with strict resource caps to prevent resource exhaustion on local development machines (WSL2 / Docker Desktop):
+Configured with strict resource caps following the **Docker Compose V2 specification** (`deploy.resources.limits`) to prevent resource exhaustion on local development machines (WSL2 / Docker Desktop):
 
 | Service | Memory Limit | CPU Limit |
 | :--- | :--- | :--- |
@@ -117,10 +117,11 @@ Configured with strict resource caps to prevent resource exhaustion on local dev
 
 ## 5. Quick Start Guide
 
-### Step 1: Start the Cluster
+### Step 1: Initialize Environment & Start the Cluster
 ```bash
+make init-env
 make up
-# or: docker-compose up -d
+# or: docker compose up -d
 ```
 *The master container automatically performs background bootstrap (initializing HDFS directories, uploading sample datasets, distributing Spark JARs, and creating ClickHouse schemas).*
 
@@ -162,7 +163,7 @@ make clean
 
 ## 6. Web Interfaces
 
-- **Apache Airflow 3.2.1 UI**: [http://localhost:8085](http://localhost:8085) (`admin` / `admin`)
+- **Apache Airflow 3.2.1 UI**: [http://localhost:8085](http://localhost:8085) (Credentials configured in `.env`, default: `admin` / `admin123`)
 - **JupyterLab (Interactive PySpark)**: [http://localhost:8888/lab](http://localhost:8888/lab)
 - **HDFS NameNode**: [http://localhost:9870](http://localhost:9870)
 - **YARN ResourceManager**: [http://localhost:8088](http://localhost:8088)

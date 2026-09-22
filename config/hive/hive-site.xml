@@ -17,7 +17,7 @@
   </property>
   <property>
     <name>javax.jdo.option.ConnectionPassword</name>
-    <value>hivepassword</value>
+    <value>postgres123</value>
   </property>
 
   <!-- Hive Metastore Thrift Service on Master -->

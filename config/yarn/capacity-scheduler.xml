@@ -1,21 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
 <configuration>
+  <!-- Root Queue Sub-queues -->
   <property>
     <name>yarn.scheduler.capacity.root.queues</name>
-    <value>default</value>
+    <value>default,etl</value>
   </property>
+
+  <!-- Default Queue (Interactive / Ad-hoc: 30% baseline) -->
   <property>
     <name>yarn.scheduler.capacity.root.default.capacity</name>
+    <value>30</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.capacity.root.default.maximum-capacity</name>
     <value>100</value>
   </property>
   <property>
     <name>yarn.scheduler.capacity.root.default.user-limit-factor</name>
     <value>1</value>
-  </property>
-  <property>
-    <name>yarn.scheduler.capacity.root.default.maximum-capacity</name>
-    <value>100</value>
   </property>
   <property>
     <name>yarn.scheduler.capacity.root.default.state</name>
@@ -25,8 +28,26 @@
     <name>yarn.scheduler.capacity.root.default.acl_submit_applications</name>
     <value>*</value>
   </property>
+
+  <!-- ETL Queue (Batch Pipelines: 70% baseline) -->
   <property>
-    <name>yarn.scheduler.capacity.root.default.acl_administer_queue</name>
+    <name>yarn.scheduler.capacity.root.etl.capacity</name>
+    <value>70</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.capacity.root.etl.maximum-capacity</name>
+    <value>100</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.capacity.root.etl.user-limit-factor</name>
+    <value>1</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.capacity.root.etl.state</name>
+    <value>RUNNING</value>
+  </property>
+  <property>
+    <name>yarn.scheduler.capacity.root.etl.acl_submit_applications</name>
     <value>*</value>
   </property>
 </configuration>

@@ -1,4 +1,4 @@
-.PHONY: help build up down restart ps logs bootstrap test status master clean gen-secrets test-unit
+.PHONY: help build up down restart ps logs bootstrap test status master clean gen-secrets test-unit init-env
 
 # Docker Compose v2 (no hyphen) — v1 deprecated
 DC := docker compose
@@ -6,6 +6,7 @@ DC := docker compose
 help:
 	@echo "Big Data Platform CLI (Hadoop + YARN + Spark + Hive + ClickHouse + ZooKeeper)"
 	@echo "Available commands:"
+	@echo "  make init-env    - Initialize .env file from .env.example"
 	@echo "  make build       - Build Unified Base Docker Image"
 	@echo "  make up          - Start all cluster containers in background"
 	@echo "  make down        - Stop cluster containers"
@@ -19,6 +20,12 @@ help:
 	@echo "  make gen-secrets - Generate Airflow Fernet & Secret keys for .env"
 	@echo "  make master      - Open interactive bash shell inside Master node"
 	@echo "  make clean       - Stop containers and purge all persistent volumes"
+
+init-env:
+	@test -f .env || cp .env.example .env
+	@mkdir -p config/ssh
+	@test -f config/ssh/id_rsa || ssh-keygen -t rsa -b 2048 -N "" -f config/ssh/id_rsa -C "cluster-internal"
+	@echo ".env and cluster SSH keys are ready."
 
 build:
 	$(DC) build

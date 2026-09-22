@@ -33,6 +33,19 @@ while ! nc -z postgres 5432 && ! nc -z hive-db 5432; do
   sleep 2
 done
 
+# Synchronize PostgreSQL password into hive-site.xml dynamically
+if [ -n "$POSTGRES_PASSWORD" ]; then
+  sed -i "s|<value>postgres123</value>|<value>${POSTGRES_PASSWORD}</value>|g" $HIVE_HOME/conf/hive-site.xml 2>/dev/null || true
+  sed -i "s|<value>hivepassword</value>|<value>${POSTGRES_PASSWORD}</value>|g" $HIVE_HOME/conf/hive-site.xml 2>/dev/null || true
+fi
+
+# Ensure cluster authorized SSH keys are registered
+if [ -f /config/ssh/id_rsa.pub ]; then
+  mkdir -p /root/.ssh
+  cat /config/ssh/id_rsa.pub >> /root/.ssh/authorized_keys
+  chmod 600 /root/.ssh/authorized_keys
+fi
+
 if ! schematool -dbType postgres -info > /dev/null 2>&1; then
   echo "[Master] Initializing Hive Metastore Schema in PostgreSQL..."
   schematool -dbType postgres -initSchema || true
@@ -78,14 +91,36 @@ echo "[Master] All master services started successfully!"
   echo "[Auto-Bootstrap] Initializing HDFS standard directories..."
   bash /scripts/bootstrap/01-init-hdfs.sh 2>/dev/null || true
 
-  if [ -d /data ]; then
-    echo "[Auto-Bootstrap] Seeding sample datasets to HDFS /data..."
-    hdfs dfs -mkdir -p /data 2>/dev/null || true
-    for f in /data/*.csv; do
+  if [ -d /data/home-credit-default-risk ]; then
+    echo "[Auto-Bootstrap] Seeding Home Credit datasets to HDFS /data/home-credit-default-risk..."
+    hdfs dfs -mkdir -p /data/home-credit-default-risk 2>/dev/null || true
+    for f in /data/home-credit-default-risk/*.csv; do
       if [ -f "$f" ]; then
-        hdfs dfs -put -f "$f" /data/ 2>/dev/null || true
+        hdfs dfs -put -f "$f" /data/home-credit-default-risk/ 2>/dev/null || true
       fi
     done
+  fi
+
+  if [ -d /data/sales ]; then
+    hdfs dfs -mkdir -p /data/sales 2>/dev/null || true
+    for f in /data/sales/*.csv; do
+      if [ -f "$f" ]; then
+        hdfs dfs -put -f "$f" /data/sales/ 2>/dev/null || true
+      fi
+    done
+  fi
+
+  # Auto-seed PostgreSQL source_crm database if script and data are available
+  if [ -f /scripts/ops/seed_postgres_from_csv.py ] && [ -d /data/home-credit-default-risk ]; then
+    echo "[Auto-Bootstrap] Seeding PostgreSQL source_crm database..."
+    python3 /scripts/ops/seed_postgres_from_csv.py \
+      --host postgres \
+      --port 5432 \
+      --user hive \
+      --password "${POSTGRES_PASSWORD:-postgres123}" \
+      --database source_crm \
+      --input-dir /data/home-credit-default-risk \
+      --batch-size 10000 2>&1 | tee -a /var/log/hadoop/seed_postgres.log || true
   fi
 
   if ! hdfs dfs -test -d /spark-jars 2>/dev/null; then

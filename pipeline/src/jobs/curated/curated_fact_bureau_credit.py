@@ -53,9 +53,9 @@ class CuratedFactBureauCreditJob(BaseSparkJob):
         dim_cust = spark.read.parquet(os.path.join(self.curated_base_dir, "dim_customer")).select("sk_id_curr", "sk_customer_key")
         dim_src = spark.read.parquet(os.path.join(self.curated_base_dir, "dim_bureau_source")).select("credit_type", "sk_bureau_source_key")
 
-        # 1. Join with dim_customer & dim_bureau_source
+        # 1. Join with dim_customer (standard join with AQE) & dim_bureau_source (broadcast lookup)
         df_joined = (
-            df.join(F.broadcast(dim_cust), on="sk_id_curr", how="left")
+            df.join(dim_cust, on="sk_id_curr", how="left")
             .withColumn("sk_customer_key", F.coalesce(F.col("sk_customer_key"), F.lit(-1).cast(LongType())))
             .join(F.broadcast(dim_src), on="credit_type", how="left")
             .withColumn("sk_bureau_source_key", F.coalesce(F.col("sk_bureau_source_key"), F.lit(-1).cast(IntegerType())))

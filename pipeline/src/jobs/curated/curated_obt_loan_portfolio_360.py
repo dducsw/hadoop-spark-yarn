@@ -71,11 +71,11 @@ class CuratedObtLoanPortfolio360Job(BaseSparkJob):
             schema_snap = "sk_id_prev INT, latest_balance DECIMAL(18,2), latest_credit_limit DECIMAL(18,2), latest_utilization_ratio DECIMAL(8,6), latest_dpd INT, latest_contract_status STRING, latest_snapshot_month INT"
             df_latest_snap = spark.createDataFrame([], schema=schema_snap)
 
-        # Broadcast dimension joins + latest snapshot join
+        # Dimension joins (AQE for dim_cust; broadcast for small lookup dimensions) + latest snapshot join
         audit_cols = ["_source_system", "_processed_at", "_batch_id", "_source_table", "_curated_at"]
         df_obt = (
             df
-            .join(F.broadcast(dim_cust.drop(*audit_cols)), on="sk_customer_key", how="left")
+            .join(dim_cust.drop(*audit_cols), on="sk_customer_key", how="left")
             .join(F.broadcast(dim_prod.drop(*audit_cols)), on="sk_product_key", how="left")
             .join(F.broadcast(dim_chan.drop(*audit_cols)), on="sk_channel_key", how="left")
             .join(F.broadcast(dim_dec.drop(*audit_cols)), on="sk_decision_key", how="left")

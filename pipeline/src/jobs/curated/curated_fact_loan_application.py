@@ -147,9 +147,9 @@ class CuratedFactLoanApplicationJob(BaseSparkJob):
             "name_contract_status", "code_reject_reason", "name_client_type", "sk_decision_key"
         )
 
-        # 1. Join dimensions with broadcast
+        # 1. Join dimensions (broadcast small lookups; allow AQE/CBO for customer dimension)
         df_joined = (
-            df.join(F.broadcast(dim_cust), on="sk_id_curr", how="left")
+            df.join(dim_cust, on="sk_id_curr", how="left")
             .withColumn("sk_customer_key", F.coalesce(F.col("sk_customer_key"), F.lit(-1).cast(LongType())))
             .join(F.broadcast(dim_prod), on="name_contract_type", how="left")
             .withColumn("sk_product_key", F.coalesce(F.col("sk_product_key"), F.lit(-1).cast(IntegerType())))

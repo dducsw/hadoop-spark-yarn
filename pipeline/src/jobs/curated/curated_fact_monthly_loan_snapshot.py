@@ -112,9 +112,9 @@ class CuratedFactMonthlyLoanSnapshotJob(BaseSparkJob):
             data_dpd = [(0, 0, 0), (1, 1, 30), (2, 31, 60), (3, 61, 90), (4, 91, 120), (5, 121, 150), (6, 151, 999999)]
             dim_dpd = spark.createDataFrame(data_dpd, schema=schema_dpd)
 
-        # 1. Join with dim_customer
+        # 1. Join with dim_customer (standard join with AQE)
         df_joined = (
-            df.join(F.broadcast(dim_cust), on="sk_id_curr", how="left")
+            df.join(dim_cust, on="sk_id_curr", how="left")
             .withColumn("sk_customer_key", F.coalesce(F.col("sk_customer_key"), F.lit(-1).cast(LongType())))
             .withColumnRenamed("months_balance", "relative_month_offset")
         )
