@@ -1,9 +1,7 @@
 """Pipeline Audit & Governance Logger backed by PostgreSQL / RDBMS."""
-import os
-import sys
 import uuid
 from datetime import datetime
-from typing import Optional
+
 from pyspark.sql import SparkSession
 
 try:
@@ -16,7 +14,7 @@ except (ImportError, ValueError):
 
 
 def log_pipeline_execution(
-    spark: Optional[SparkSession],
+    spark: SparkSession | None,
     pipeline_layer: str,
     table_name: str,
     source_table: str,
@@ -26,10 +24,10 @@ def log_pipeline_execution(
     start_time: datetime,
     end_time: datetime,
     status: str,
-    row_count: Optional[int] = None,
-    column_count: Optional[int] = None,
-    rejected_count: Optional[int] = None,
-    error_message: Optional[str] = None,
+    row_count: int | None = None,
+    column_count: int | None = None,
+    rejected_count: int | None = None,
+    error_message: str | None = None,
 ) -> None:
     """Logs job run metrics into PostgreSQL/RDBMS metadata table (zero HDFS small-files)."""
     duration_sec = round((end_time - start_time).total_seconds(), 2)

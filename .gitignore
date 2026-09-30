@@ -51,3 +51,5 @@ data/home-credit-default-risk/*.csv
 
 # Skills
 .agents
+.ruff_cache
+.pytest_cache

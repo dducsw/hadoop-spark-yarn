@@ -4,16 +4,15 @@ import argparse
 import os
 import sys
 from decimal import Decimal
+
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DecimalType,
     DoubleType,
-    LongType,
     StringType,
     StructField,
     StructType,
-    TimestampType,
 )
 
 SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -49,7 +48,11 @@ class ReconciliationAuditJob(BaseSparkJob):
         )
 
     def extract(self, spark: SparkSession) -> DataFrame:
-        """Loads Stage application data and Curated OBT for financial reconciliation."""
+        """Reads the OBT and computes the reconciliation statistics in a single pass.
+
+        Statistics are stashed on the instance so `validate()` can raise without a
+        second full scan, and `transform()` can materialize the audit row.
+        """
         path_train = os.path.join(self.stage_base_dir, "application_train")
         path_test = os.path.join(self.stage_base_dir, "application_test")
         path_obt = os.path.join(self.curated_base_dir, "obt_loan_portfolio_360")
@@ -59,48 +62,48 @@ class ReconciliationAuditJob(BaseSparkJob):
         df_test = spark.read.parquet(path_test)
         df_obt = spark.read.parquet(path_obt)
 
-        return self._build_audit_dataframe(spark, df_train, df_test, df_obt)
-
-    def _build_audit_dataframe(
-        self,
-        spark: SparkSession,
-        df_train: DataFrame,
-        df_test: DataFrame,
-        df_obt: DataFrame,
-    ) -> DataFrame:
-        # Single-pass aggregation per dataset: combines null PK check & sum(amt_credit)
         train_stats = df_train.select(
             F.count(F.when(F.col("sk_id_curr").isNull(), 1)).alias("null_pk"),
             F.coalesce(F.sum("amt_credit"), F.lit(0)).alias("sum_credit"),
         ).collect()[0]
-        null_train_pk = train_stats["null_pk"]
-        stage_train_sum = train_stats["sum_credit"] or Decimal("0.00")
-
         test_stats = df_test.select(
             F.count(F.when(F.col("sk_id_curr").isNull(), 1)).alias("null_pk"),
             F.coalesce(F.sum("amt_credit"), F.lit(0)).alias("sum_credit"),
         ).collect()[0]
-        null_test_pk = test_stats["null_pk"]
-        stage_test_sum = test_stats["sum_credit"] or Decimal("0.00")
-
         obt_stats = df_obt.select(
             F.count(F.when(F.col("sk_id_curr").isNull(), 1)).alias("null_pk"),
             F.coalesce(
-                F.sum(F.when(F.col("is_current_application") == True, F.col("amt_credit"))),
+                F.sum(F.when(F.col("is_current_application"), F.col("amt_credit"))),
                 F.lit(0),
             ).alias("current_credit"),
         ).collect()[0]
-        null_obt_pk = obt_stats["null_pk"]
-        obt_current_credit = obt_stats["current_credit"] or Decimal("0.00")
 
-        if null_train_pk > 0 or null_test_pk > 0 or null_obt_pk > 0:
-            raise ValueError(
-                f"Data Quality Violation: Null PK detected! Train: {null_train_pk}, Test: {null_test_pk}, OBT: {null_obt_pk}"
-            )
+        self._null_pk_counts = {
+            "Train": train_stats["null_pk"],
+            "Test": test_stats["null_pk"],
+            "OBT": obt_stats["null_pk"],
+        }
+        self._stage_credit = (train_stats["sum_credit"] or Decimal("0.00")) + (
+            test_stats["sum_credit"] or Decimal("0.00")
+        )
+        self._obt_credit = obt_stats["current_credit"] or Decimal("0.00")
 
-        total_stage_credit = stage_train_sum + stage_test_sum
+        return df_obt
+
+    def validate(self, df: DataFrame) -> None:
+        """Circuit-breaker: fails the pipeline before serving corrupted financial data."""
+        null_pk = self._null_pk_counts
+        if any(count > 0 for count in null_pk.values()):
+            raise ValueError(f"Data Quality Violation: Null PK detected! {null_pk}")
+
+        total_stage_credit = self._stage_credit
+        obt_current_credit = self._obt_credit
         diff = abs(total_stage_credit - obt_current_credit)
-        pct_diff = (float(diff) / float(total_stage_credit) * 100.0) if total_stage_credit > 0 else 0.0
+        pct_diff = (
+            (float(diff) / float(total_stage_credit) * 100.0)
+            if total_stage_credit > 0
+            else 0.0
+        )
 
         self.logger.info(
             f"Financial Reconciliation Check: Stage Total Credit = {total_stage_credit:,.2f} | "
@@ -109,8 +112,18 @@ class ReconciliationAuditJob(BaseSparkJob):
 
         if pct_diff > self.max_discrepancy_pct:
             raise ValueError(
-                f"Reconciliation Failed! Credit amount discrepancy {pct_diff:.4f}% exceeds limit {self.max_discrepancy_pct}%"
+                f"Reconciliation Failed! Credit amount discrepancy {pct_diff:.4f}% "
+                f"exceeds limit {self.max_discrepancy_pct}%"
             )
+
+    def transform(self, df: DataFrame) -> DataFrame:
+        """Materializes the passed reconciliation audit record."""
+        diff = abs(self._stage_credit - self._obt_credit)
+        pct_diff = (
+            (float(diff) / float(self._stage_credit) * 100.0)
+            if self._stage_credit > 0
+            else 0.0
+        )
 
         audit_schema = StructType([
             StructField("check_name", StringType(), False),
@@ -120,22 +133,17 @@ class ReconciliationAuditJob(BaseSparkJob):
             StructField("discrepancy_pct", DoubleType(), False),
             StructField("passed", StringType(), False),
         ])
-
         audit_rows = [
             (
                 "sum_amt_credit_reconciliation",
-                total_stage_credit,
-                obt_current_credit,
+                self._stage_credit,
+                self._obt_credit,
                 diff,
                 pct_diff,
                 "PASSED",
             )
         ]
-
-        return spark.createDataFrame(audit_rows, schema=audit_schema)
-
-    def transform(self, df: DataFrame) -> DataFrame:
-        return df
+        return df.sparkSession.createDataFrame(audit_rows, schema=audit_schema)
 
 
 def main():

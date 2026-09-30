@@ -4,10 +4,10 @@ Supports both CSV files and Database (RDBMS/PostgreSQL via JDBC).
 Supports Full Load and Incremental Load (Watermarking).
 Allows concise connection string (URI or JDBC).
 """
-import os, sys
+import os
+import sys
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
 from pyspark.sql import DataFrame, SparkSession
@@ -43,7 +43,7 @@ class LoadType(str, Enum):
     INCREMENTAL = "incremental"
 
 
-def parse_connection_string(conn_str: Optional[str]) -> dict:
+def parse_connection_string(conn_str: str | None) -> dict:
     """
     Parses connection strings into Spark JDBC options.
     Supports:
@@ -96,13 +96,13 @@ class BaseRawIngestJob(BaseSparkJob):
         self,
         table_name: str,
         source_type: SourceType = SourceType.DB,
-        connection_string: Optional[str] = None,
-        file_name: Optional[str] = None,
-        source_db_table: Optional[str] = None,
-        primary_key: Optional[str] = None,
+        connection_string: str | None = None,
+        file_name: str | None = None,
+        source_db_table: str | None = None,
+        primary_key: str | None = None,
         load_type: LoadType = LoadType.FULL,
         watermark_col: str = "updated_at",
-        schema: Optional[StructType] = None,
+        schema: StructType | None = None,
         input_base_dir: str = "/data/home-credit-default-risk",
         output_base_dir: str = "/raw/credit_risk",
         hive_db: str = "raw_credit_risk",
@@ -138,6 +138,7 @@ class BaseRawIngestJob(BaseSparkJob):
             primary_key=primary_key,
             write_mode=WriteMode.OVERWRITE if load_type == LoadType.FULL else WriteMode.APPEND,
             source_system=source_system,
+            watermark_col=watermark_col,
         )
         self.schema = schema
 
@@ -152,8 +153,12 @@ class BaseRawIngestJob(BaseSparkJob):
         # A. Database Ingestion via Spark JDBC
         if self.source_type == SourceType.DB:
             if last_wm:
-                self.logger.info(f"Incremental query: {self.watermark_col} > '{last_wm}'")
-                dbtable_expr = f"(SELECT * FROM {self.source_db_table} WHERE {self.watermark_col} > '{last_wm}') AS inc_data"
+                # Inclusive (>=) boundary: re-reads the last committed row on purpose.
+                # A strict (>) filter silently drops rows sharing the max timestamp
+                # (clock skew / same-second arrivals). The overlap is de-duplicated
+                # downstream in the Stage layer, keeping the landing zone complete.
+                self.logger.info(f"Incremental query: {self.watermark_col} >= '{last_wm}'")
+                dbtable_expr = f"(SELECT * FROM {self.source_db_table} WHERE {self.watermark_col} >= '{last_wm}') AS inc_data"
             else:
                 self.logger.info(f"Initial/Full extraction from table '{self.source_db_table}'")
                 dbtable_expr = self.source_db_table
@@ -185,8 +190,9 @@ class BaseRawIngestJob(BaseSparkJob):
             df = reader.option("inferSchema", "true").csv(self.csv_path)
 
         if last_wm and self.watermark_col in df.columns:
-            self.logger.info(f"Filtering CSV incrementally with {self.watermark_col} > '{last_wm}'")
-            df = df.filter(F.col(self.watermark_col) > last_wm)
+            # Inclusive boundary for the same reason as the JDBC path above.
+            self.logger.info(f"Filtering CSV incrementally with {self.watermark_col} >= '{last_wm}'")
+            df = df.filter(F.col(self.watermark_col) >= last_wm)
 
         return df
 

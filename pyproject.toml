@@ -1,0 +1,26 @@
+[tool.ruff]
+line-length = 120
+# Match the cluster runtime (Ubuntu 22.04 ships Python 3.10) so lint never proposes
+# syntax that is unavailable on the workers.
+target-version = "py310"
+extend-exclude = ["notebooks", "data", ".agents"]
+
+[tool.ruff.lint]
+# Safe, auto-fixable housekeeping: unused imports/vars, import order, modern syntax,
+# common bug patterns and simplifications. Formatting is intentionally NOT enforced here.
+select = ["E", "F", "W", "I", "UP", "B", "C4", "RUF"]
+ignore = [
+    "E402",   # modules intentionally adjust sys.path before importing local packages
+    "E501",   # line length handled by the 120-char budget, not enforced by lint
+    "UP042",  # keep explicit (str, Enum) for stable repr/JSON serialization
+    "B027",   # validate() is an intentionally optional no-op hook in the template base
+    "RUF012", # mutable class attributes are intentional for config objects
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ files legitimately re-export symbols.
+"pipeline/src/common/__init__.py" = ["F401"]
+"pipeline/src/schemas/__init__.py" = ["F401"]

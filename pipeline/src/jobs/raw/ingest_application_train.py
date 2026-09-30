@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-import argparse, os, sys
+import argparse
+import os
+import sys
 
 JOB_DIR = os.path.dirname(os.path.abspath(__file__))
 PIPELINE_DIR = os.path.abspath(os.path.join(JOB_DIR, "..", "..", ".."))

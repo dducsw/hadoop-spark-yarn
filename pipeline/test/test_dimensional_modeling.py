@@ -44,7 +44,7 @@ class TestDimensionalModeling(unittest.TestCase):
         rows2 = df_sk2.collect()
 
         self.assertEqual(len(rows1), 3)
-        for r1, r2 in zip(rows1, rows2):
+        for r1, r2 in zip(rows1, rows2, strict=True):
             self.assertEqual(r1["sk_customer_key"], r2["sk_customer_key"])
             self.assertIsInstance(r1["sk_customer_key"], int)
             self.assertEqual(df_sk1.schema["sk_customer_key"].dataType, LongType())

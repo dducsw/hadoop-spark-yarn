@@ -4,18 +4,25 @@ Production Airflow DAG: Credit Risk Data Pipeline (risk_data_pipeline)
 Orchestrates: Raw Landing -> Stage ODS -> Curated Core (Kimball Dims/Facts) -> Data Mart (OBT 360) -> OLAP Serving (ClickHouse)
 Standard: Zero-top-level compute, TaskFlow API, fine-grained lineage, deterministic batch_id, and terminal barrier.
 """
-import os
 from datetime import datetime, timedelta
-from typing import Dict, Any
+from typing import Any
 
-from airflow.decorators import dag, task, task_group
-from airflow.operators.bash import BashOperator
+try:
+    from airflow.sdk import dag, task, task_group
+except ImportError:
+    from airflow.decorators import dag, task, task_group
+
+try:
+    from airflow.providers.standard.operators.bash import BashOperator
+except ImportError:
+    from airflow.operators.bash import BashOperator
+
 
 
 # -----------------------------------------------------------------------------
 # 1. Alerting & Notification Callback
 # -----------------------------------------------------------------------------
-def on_failure_alert(context: Dict[str, Any]) -> None:
+def on_failure_alert(context: dict[str, Any]) -> None:
     """Triggered automatically when any task in the pipeline fails."""
     dag_id = context.get("dag").dag_id
     task_id = context.get("task_instance").task_id
@@ -53,6 +60,7 @@ def build_spark_task(task_id: str, layer: str, script: str) -> BashOperator:
         bash_command=f"bash /opt/airflow/scripts/ops/submit_spark_job.sh {layer} {script} '{{{{ run_id }}}}' ",
         pool="spark_yarn_pool",
         env={"BATCH_ID": "{{ run_id }}"},
+        append_env=True,
     )
 
 

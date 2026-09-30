@@ -3,10 +3,10 @@
 Demo Airflow DAG: Big Data DWH Pipeline Lifecycle (Raw -> Stage ODS -> Curated Mart -> ClickHouse)
 """
 from datetime import datetime, timedelta
+
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-
 
 default_args = {
     "owner": "data_engineer",

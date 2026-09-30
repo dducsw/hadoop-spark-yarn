@@ -39,6 +39,10 @@ if [ -n "$POSTGRES_PASSWORD" ]; then
   sed -i "s|<value>hivepassword</value>|<value>${POSTGRES_PASSWORD}</value>|g" $HIVE_HOME/conf/hive-site.xml 2>/dev/null || true
 fi
 
+# Persist core environment variables for non-interactive SSH sessions
+printenv | grep -E '^(JDBC_|POSTGRES_|CLICKHOUSE_|HADOOP_|SPARK_|HIVE_|METADATA_|PII_|QUARANTINE_)' >> /etc/environment 2>/dev/null || true
+
+
 # Ensure cluster authorized SSH keys are registered
 if [ -f /config/ssh/id_rsa.pub ]; then
   mkdir -p /root/.ssh

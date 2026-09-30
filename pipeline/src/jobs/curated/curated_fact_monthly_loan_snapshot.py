@@ -3,6 +3,7 @@
 import argparse
 import os
 import sys
+
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
@@ -37,7 +38,9 @@ class CuratedFactMonthlyLoanSnapshotJob(BaseSparkJob):
             source_path=source_path,
             target_path=target_path,
             primary_key="sk_snapshot_key",
-            write_mode=WriteMode.DYNAMIC_PARTITION,
+            # Full recompute: static overwrite replaces the whole table so stale
+            # loan_source_system partitions cannot survive a re-run.
+            write_mode=WriteMode.OVERWRITE,
             partition_by=["loan_source_system"],
         )
         self.curated_base_dir = curated_base_dir

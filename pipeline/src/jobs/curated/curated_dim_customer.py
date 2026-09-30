@@ -3,17 +3,16 @@
 import argparse
 import os
 import sys
+
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import (
-    BooleanType,
     DecimalType,
     IntegerType,
     LongType,
     StringType,
     StructField,
     StructType,
-    TimestampType,
 )
 
 SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))

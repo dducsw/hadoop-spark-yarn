@@ -15,9 +15,21 @@ from src.common.db_metadata import get_metadata_cursor
 from src.common.watermark import get_watermark, update_watermark
 
 
+def _metadata_db_available() -> bool:
+    """True only when the PostgreSQL metadata database is reachable with current env."""
+    try:
+        with get_metadata_cursor() as (cur, _):
+            cur.execute("SELECT 1")
+        return True
+    except Exception:
+        return False
+
+
 class TestPipelineResilience(unittest.TestCase):
     def test_watermark_atomic_upsert(self):
         """Verify atomic upsert updates existing watermark without duplicate rows or race condition."""
+        if not _metadata_db_available():
+            self.skipTest("PostgreSQL metadata DB not reachable (set POSTGRES_PASSWORD)")
         tbl = "test_fintech_transactions"
         val1 = "2026-09-08 01:00:00"
         val2 = "2026-09-08 02:00:00"
@@ -38,6 +50,8 @@ class TestPipelineResilience(unittest.TestCase):
 
     def test_audit_logging_to_db(self):
         """Verify audit execution metrics are safely logged into database."""
+        if not _metadata_db_available():
+            self.skipTest("PostgreSQL metadata DB not reachable (set POSTGRES_PASSWORD)")
         start = datetime.now(timezone.utc)
         end = datetime.now(timezone.utc)
         test_tbl = "test_fact_loans"
@@ -92,7 +106,7 @@ class TestPipelineResilience(unittest.TestCase):
         script_path = os.path.join(PROJECT_DIR, "scripts", "ops", "sync_hdfs_to_clickhouse.sh")
         self.assertTrue(os.path.exists(script_path))
 
-        with open(script_path, "r", encoding="utf-8") as f:
+        with open(script_path, encoding="utf-8") as f:
             content = f.read()
 
         self.assertIn("obt_loan_portfolio_360_staging", content)

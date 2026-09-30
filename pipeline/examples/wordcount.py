@@ -2,8 +2,8 @@
 """
 Simple PySpark WordCount on YARN
 """
-import sys
 from pyspark.sql import SparkSession
+
 
 def main():
     spark = SparkSession.builder \

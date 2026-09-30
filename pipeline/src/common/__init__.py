@@ -8,14 +8,14 @@ from .spark_session import get_spark_session
 from .watermark import get_watermark, update_watermark
 
 __all__ = [
-    "BaseSparkJob",
-    "WriteMode",
-    "BaseRawIngestJob",
-    "BaseStageJob",
     "BaseCuratedJob",
-    "get_spark_session",
+    "BaseRawIngestJob",
+    "BaseSparkJob",
+    "BaseStageJob",
+    "WriteMode",
     "get_logger",
-    "log_pipeline_execution",
+    "get_spark_session",
     "get_watermark",
+    "log_pipeline_execution",
     "update_watermark",
 ]

@@ -1,7 +1,7 @@
 """Centralized Metadata & State Management using PostgreSQL."""
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator, Tuple
 
 try:
     import psycopg2
@@ -38,7 +38,7 @@ class _NoOpCursor:
 
 
 @contextmanager
-def get_metadata_cursor() -> Generator[Tuple[any, str], None, None]:
+def get_metadata_cursor() -> Generator[tuple[any, str], None, None]:
     """
     Yields (cursor, 'postgres') connected to PostgreSQL metadata database.
     If psycopg2 is unavailable, yields a no-op cursor to preserve pipeline execution.

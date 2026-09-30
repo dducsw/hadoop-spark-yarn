@@ -8,8 +8,9 @@ set -e
 CH_HOST="${CLICKHOUSE_HOST:-clickhouse}"
 CH_PORT="${CLICKHOUSE_PORT:-8123}"
 CH_USER="${CLICKHOUSE_USER:-default}"
-CH_PASS="${CLICKHOUSE_PASSWORD:-clickhouse123}"
-HDFS_SRC_PATH="hdfs://master:9000/curated/credit_risk/obt_loan_portfolio_360/*.parquet"
+# Fail fast instead of silently falling back to a hard-coded credential.
+CH_PASS="${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD environment variable must be set}"
+HDFS_SRC_PATH="${HDFS_SRC_PATH:-hdfs://master:9000/curated/credit_risk/obt_loan_portfolio_360/*.parquet}"
 
 ch_exec() {
   curl -s -S -f -u "${CH_USER}:${CH_PASS}" "http://${CH_HOST}:${CH_PORT}/" --data-binary "$1"
@@ -36,7 +37,6 @@ CREATE TABLE IF NOT EXISTS analytics.obt_loan_portfolio_360 (
     flag_own_realty String DEFAULT '',
     cnt_children Int32 DEFAULT 0,
     cnt_fam_members Int32 DEFAULT 0,
-    amt_income_total Decimal(18, 2) DEFAULT 0,
     income_bracket String DEFAULT '',
     name_income_type String DEFAULT '',
     name_education_type String DEFAULT '',
@@ -91,7 +91,7 @@ ch_exec "TRUNCATE TABLE analytics.obt_loan_portfolio_360_staging;"
 ch_exec "
 INSERT INTO analytics.obt_loan_portfolio_360_staging (
     sk_id_curr, sk_id_prev, is_current_application, target_default_flag,
-    code_gender, flag_own_car, flag_own_realty, cnt_children, cnt_fam_members, amt_income_total,
+    code_gender, flag_own_car, flag_own_realty, cnt_children, cnt_fam_members,
     income_bracket,
     name_income_type, name_education_type, name_family_status, name_housing_type, occupation_type,
     organization_type, age_years, employed_years, name_contract_type, portfolio_category,
@@ -104,7 +104,7 @@ INSERT INTO analytics.obt_loan_portfolio_360_staging (
 )
 SELECT
     sk_id_curr, sk_id_prev, is_current_application, target_default_flag,
-    code_gender, flag_own_car, flag_own_realty, cnt_children, cnt_fam_members, amt_income_total,
+    code_gender, flag_own_car, flag_own_realty, cnt_children, cnt_fam_members,
     income_bracket,
     name_income_type, name_education_type, name_family_status, name_housing_type, occupation_type,
     organization_type, age_years, employed_years, name_contract_type, portfolio_category,

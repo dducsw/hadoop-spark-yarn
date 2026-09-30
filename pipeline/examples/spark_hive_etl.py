@@ -3,9 +3,10 @@
 Production-like ETL Job:
 Read CSV from HDFS -> Clean & Aggregate with PySpark -> Save as Partitioned Parquet Table in Hive Lakehouse
 """
-import sys
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, sum as _sum, avg, count, round
+from pyspark.sql.functions import avg, col, count, round
+from pyspark.sql.functions import sum as _sum
+
 
 def main():
     spark = SparkSession.builder \

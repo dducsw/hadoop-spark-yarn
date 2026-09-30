@@ -1,9 +1,9 @@
 """Base Curated (Gold) Feature Engineering & Aggregation Job template."""
-import os, sys
+import os
+import sys
 from abc import abstractmethod
-from typing import List, Optional
+
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql import functions as F
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
@@ -16,15 +16,15 @@ class BaseCuratedJob(BaseSparkJob):
     def __init__(
         self,
         feature_name: str,
-        stage_table_name: Optional[str] = None,
+        stage_table_name: str | None = None,
         stage_base_dir: str = "/stage/credit_risk",
         curated_base_dir: str = "/curated/credit_risk",
         stage_db: str = "stage_credit_risk",
         curated_db: str = "credit_risk",
         primary_key: str = "SK_ID_CURR",
-        source_table: Optional[str] = None,
+        source_table: str | None = None,
         write_mode: WriteMode = WriteMode.OVERWRITE,
-        partition_by: Optional[List[str]] = None,
+        partition_by: list[str] | None = None,
     ):
         stage_table = stage_table_name or feature_name
         source_path = os.path.join(stage_base_dir, stage_table)
@@ -53,8 +53,6 @@ class BaseCuratedJob(BaseSparkJob):
         pass
 
     def transform(self, df: DataFrame) -> DataFrame:
-        # 1. Execute business feature engineering / aggregations
-        df_features = self.build_features(df)
-
-        # 2. Add standardized metadata audit columns
-        return self.add_audit_metadata(df_features)
+        # Execute business feature engineering / aggregations. The base lifecycle
+        # (BaseSparkJob.run) attaches the standardized audit metadata exactly once.
+        return self.build_features(df)

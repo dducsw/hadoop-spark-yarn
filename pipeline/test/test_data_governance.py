@@ -18,8 +18,15 @@ for p in [PIPELINE_DIR, PROJECT_DIR]:
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from src.common.security import mask_string, tokenize_id, mask_income_bracket
 from src.common.base_stage_job import BaseStageJob
+from src.common.security import mask_income_bracket, mask_string, tokenize_id
+
+
+class _ClientStageJob(BaseStageJob):
+    """Minimal concrete Stage job used to exercise the base template in isolation."""
+
+    def clean_and_cast(self, df):
+        return df
 
 
 class TestDataGovernance(unittest.TestCase):
@@ -67,6 +74,12 @@ class TestDataGovernance(unittest.TestCase):
         self.assertEqual(len(rows[0]["token"]), 64)  # SHA-256 hex length
         self.assertNotEqual(rows[0]["token"], rows[1]["token"])
 
+        # Deterministic: same input + salt must always produce the same token.
+        rows_again = df.withColumn(
+            "token", tokenize_id(F.col("sk_id_curr"), salt="test_salt")
+        ).collect()
+        self.assertEqual(rows[0]["token"], rows_again[0]["token"])
+
     def test_income_bracket_generalization(self):
         """Verify mask_income_bracket generalizes numbers into discrete brackets."""
         df = self.spark.sql("""
@@ -86,7 +99,7 @@ class TestDataGovernance(unittest.TestCase):
         """Verify BaseStageJob routes Null PKs and Duplicates to Quarantine and keeps clean records."""
         quarantine_dir = os.path.join(self.test_dir, "quarantine").replace("\\", "/")
 
-        job = BaseStageJob(
+        job = _ClientStageJob(
             table_name="test_clients",
             primary_key="client_id",
             dedup_cols=["client_id"],
@@ -101,7 +114,9 @@ class TestDataGovernance(unittest.TestCase):
             SELECT 2 AS client_id, 'Charlie' AS name
         """)
 
-        df_clean = job.transform(df_in)
+        # transform() intentionally no longer attaches audit metadata; the unified
+        # lifecycle (BaseSparkJob.run) does that once. Mirror it here for the assertion.
+        df_clean = job.add_audit_metadata(job.transform(df_in))
         clean_rows = df_clean.collect()
 
         # Check clean records

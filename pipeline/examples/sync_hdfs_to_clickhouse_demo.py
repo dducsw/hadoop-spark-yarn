@@ -3,11 +3,12 @@
 Enterprise Demo: Sync Data from HDFS to ClickHouse OLAP
 Demonstrates PySpark reading from HDFS, cleaning/enriching, and writing to ClickHouse via JDBC.
 """
-import sys
+import os
 import time
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, current_timestamp
-from pyspark.sql.types import IntegerType, StringType, DecimalType
+from pyspark.sql.types import DecimalType, IntegerType, StringType
 
 
 def main():

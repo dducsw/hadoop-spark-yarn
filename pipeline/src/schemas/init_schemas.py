@@ -39,7 +39,9 @@ def init_all_schemas(layer: str = "all") -> None:
 
             for ddl in ddls:
                 # Extract table name from DDL for clean logging
-                first_line = [line.strip() for line in ddl.strip().split("\n") if line.strip()][0]
+                first_line = next(
+                    line.strip() for line in ddl.strip().split("\n") if line.strip()
+                )
                 logger.info(f"Executing: {first_line}")
                 spark.sql(ddl)
 

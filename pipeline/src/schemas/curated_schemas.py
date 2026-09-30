@@ -492,7 +492,7 @@ CREATE TABLE IF NOT EXISTS {CURATED_DB_NAME}.obt_loan_portfolio_360 (
     flag_own_realty STRING,
     cnt_children INT,
     cnt_fam_members INT,
-    amt_income_total DECIMAL(18,2),
+    income_bracket STRING,
     name_income_type STRING,
     name_education_type STRING,
     name_family_status STRING,

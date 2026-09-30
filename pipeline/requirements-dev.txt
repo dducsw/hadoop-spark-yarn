@@ -1,4 +1,0 @@
--r requirements.txt
-pytest>=8.0
-chispa>=0.9
-pytest-xdist

@@ -93,6 +93,7 @@ services:
     container_name: master
     hostname: master
     networks: [bigdata-net]
+    env_file: [.env]
     ports:
       - "9870:9870"   # HDFS NameNode Web UI
       - "9000:9000"   # HDFS NameNode RPC
@@ -207,6 +208,7 @@ services:
     container_name: airflow-webserver
     hostname: airflow-webserver
     networks: [bigdata-net]
+    env_file: [.env]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres:5432/airflow
@@ -246,6 +248,7 @@ services:
     container_name: airflow-scheduler
     hostname: airflow-scheduler
     networks: [bigdata-net]
+    env_file: [.env]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD}@postgres:5432/airflow

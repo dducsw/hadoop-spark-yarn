@@ -1,12 +1,12 @@
 """Root BaseSparkJob template with unified lifecycle, audit, and watermark."""
-import os, sys
+import os
+import sys
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
+
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
-
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 SRC_DIR = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
@@ -34,12 +34,12 @@ class BaseSparkJob(ABC):
         target_table: str,
         source_path: str,
         target_path: str,
-        primary_key: Optional[str] = None,
+        primary_key: str | None = None,
         write_mode: WriteMode = WriteMode.OVERWRITE,
-        partition_by: Optional[List[str]] = None,
+        partition_by: list[str] | None = None,
         source_system: str = "home_credit",
-        batch_id: Optional[str] = None,
-        watermark_col: Optional[str] = None,
+        batch_id: str | None = None,
+        watermark_col: str | None = None,
         persist_before_write: bool = False,
     ):
         self.pipeline_layer = pipeline_layer
@@ -58,7 +58,7 @@ class BaseSparkJob(ABC):
         self.rejected_count = 0
         self.logger = get_logger(f"{pipeline_layer.upper()}_{table_name}")
 
-    def get_last_watermark(self, spark: SparkSession) -> Optional[str]:
+    def get_last_watermark(self, spark: SparkSession) -> str | None:
         """Fetch previously committed watermark value for incremental filtering."""
         return get_watermark(spark, self.table_name)
 
@@ -97,44 +97,71 @@ class BaseSparkJob(ABC):
             f"Writing to Parquet: {self.target_path} | Mode: {self.write_mode.value} | Partitions: {self.partition_by}"
         )
         writer = df.write.format("parquet")
-
         if self.partition_by:
             writer = writer.partitionBy(*self.partition_by)
 
+        # Resolve the physical Spark write mode explicitly. DYNAMIC_PARTITION maps to
+        # "overwrite" + partitionOverwriteMode=dynamic (only touched partitions replaced);
+        # all other modes use a static overwrite so stale partitions cannot survive a
+        # full recompute. The previous global value is always restored afterwards.
+        conf_key = "spark.sql.sources.partitionOverwriteMode"
+        previous_conf = spark.conf.get(conf_key, "static")
         if self.write_mode == WriteMode.DYNAMIC_PARTITION:
-            spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
-            writer = writer.mode("overwrite")
+            spark.conf.set(conf_key, "dynamic")
+            physical_mode = "overwrite"
         else:
-            writer = writer.mode(self.write_mode.value)
+            spark.conf.set(conf_key, "static")
+            physical_mode = self.write_mode.value
 
-        # Configurable persistence strategy to avoid memory exhaustion on large datasets
-        if self.persist_before_write:
-            df.persist()
-            writer.save(self.target_path)
-            row_count = df.count()
-            df.unpersist()
-        else:
-            writer.save(self.target_path)
-            try:
-                row_count = spark.read.parquet(self.target_path).count()
-            except Exception:
-                row_count = df.count()
+        try:
+            if self.persist_before_write:
+                df.persist()
+                try:
+                    writer.mode(physical_mode).save(self.target_path)
+                    row_count = df.count()
+                finally:
+                    df.unpersist()
+            else:
+                writer.mode(physical_mode).save(self.target_path)
+                try:
+                    row_count = spark.read.parquet(self.target_path).count()
+                except Exception:
+                    row_count = df.count()
+        finally:
+            spark.conf.set(conf_key, previous_conf)
 
         if row_count == 0:
             self.logger.warning(f"Job Warning: 0 records to write for {self.target_table}")
 
         # Register Hive Metastore DDL
-        self._register_hive_table(spark)
+        self._register_hive_table(spark, df)
         return row_count
 
-    def _register_hive_table(self, spark: SparkSession) -> None:
-        """Ensures Hive Database exists and Hive external/managed table is registered."""
+    def _register_hive_table(self, spark: SparkSession, df: DataFrame | None = None) -> None:
+        """Ensures Hive Database exists and Hive external/managed table is registered.
+
+        Detects schema drift between the freshly written Parquet and any pre-existing
+        Hive table so a renamed/changed column does not silently serve stale metadata.
+        """
         db_name = self.target_table.split(".")[0]
         spark.sql(f"CREATE DATABASE IF NOT EXISTS {db_name}")
+
+        existed = spark.catalog.tableExists(self.target_table)
         spark.sql(
             f"CREATE TABLE IF NOT EXISTS {self.target_table} "
             f"USING PARQUET LOCATION '{self.target_path}'"
         )
+        if existed and df is not None:
+            existing_cols = {f.name for f in spark.table(self.target_table).schema.fields}
+            incoming_cols = set(df.columns)
+            if existing_cols != incoming_cols:
+                missing = sorted(existing_cols - incoming_cols)
+                added = sorted(incoming_cols - existing_cols)
+                self.logger.warning(
+                    f"Schema drift detected on {self.target_table}: "
+                    f"missing_in_write={missing}, new_columns={added}. "
+                    "Hive metadata may be stale; re-register the table before querying."
+                )
         if self.partition_by:
             try:
                 spark.catalog.recoverPartitions(self.target_table)

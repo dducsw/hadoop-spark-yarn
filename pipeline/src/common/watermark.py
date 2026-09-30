@@ -1,8 +1,6 @@
 """Pipeline Watermark State Management Module backed by PostgreSQL / RDBMS."""
-import os
-import sys
 from datetime import datetime, timezone
-from typing import Optional
+
 from pyspark.sql import SparkSession
 
 try:
@@ -11,7 +9,7 @@ except ImportError:
     from db_metadata import get_metadata_cursor
 
 
-def get_watermark(spark: Optional[SparkSession], table_name: str) -> Optional[str]:
+def get_watermark(spark: SparkSession | None, table_name: str) -> str | None:
     """Retrieves the latest watermark value for a given table from metadata database."""
     try:
         with get_metadata_cursor() as (cursor, backend):
@@ -30,10 +28,10 @@ def get_watermark(spark: Optional[SparkSession], table_name: str) -> Optional[st
 
 
 def update_watermark(
-    spark: Optional[SparkSession],
+    spark: SparkSession | None,
     table_name: str,
-    watermark_column: Optional[str] = "ingest_timestamp",
-    last_watermark_value: Optional[str] = None,
+    watermark_column: str | None = "ingest_timestamp",
+    last_watermark_value: str | None = None,
     status: str = "SUCCESS",
 ) -> None:
     """Atomic UPSERT of watermark state for a table in metadata database (race-condition free)."""

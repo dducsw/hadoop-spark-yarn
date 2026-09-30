@@ -3,9 +3,10 @@
 import argparse
 import os
 import sys
-from pyspark.sql import DataFrame, SparkSession
+
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import DecimalType, IntegerType, StringType
+from pyspark.sql.types import DecimalType, IntegerType
 
 SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.extend([SRC_DIR])

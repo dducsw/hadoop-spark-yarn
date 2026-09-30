@@ -1,7 +1,8 @@
 """Base Stage (Silver) Cleaning, Standardizing & DLQ Quarantine Job template."""
-import os, sys
+import os
+import sys
 from abc import abstractmethod
-from typing import List, Optional
+
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
@@ -17,16 +18,16 @@ class BaseStageJob(BaseSparkJob):
     def __init__(
         self,
         table_name: str,
-        primary_key: Optional[str] = None,
-        dedup_cols: Optional[List[str]] = None,
+        primary_key: str | None = None,
+        dedup_cols: list[str] | None = None,
         raw_base_dir: str = "/raw/credit_risk",
         stage_base_dir: str = "/stage/credit_risk",
-        quarantine_base_dir: Optional[str] = None,
+        quarantine_base_dir: str | None = None,
         raw_db: str = "raw_credit_risk",
         stage_db: str = "stage_credit_risk",
-        source_table: Optional[str] = None,
+        source_table: str | None = None,
         write_mode: WriteMode = WriteMode.OVERWRITE,
-        partition_by: Optional[List[str]] = None,
+        partition_by: list[str] | None = None,
     ):
         source_path = os.path.join(raw_base_dir, table_name)
         target_path = os.path.join(stage_base_dir, table_name)
@@ -62,22 +63,33 @@ class BaseStageJob(BaseSparkJob):
         pass
 
     def route_quarantine(self, df_rejected: DataFrame) -> None:
-        """Saves malformed/duplicate records to Dead-Letter Queue (DLQ) for audit."""
+        """Saves malformed/duplicate records to Dead-Letter Queue (DLQ) for audit.
+
+        Writes are partitioned by `_batch_id` with dynamic partition overwrite so that
+        replaying the same batch replaces its quarantine slice instead of duplicating it.
+        """
         try:
-            if df_rejected.take(1):
-                self.rejected_count = df_rejected.count()
-                df_quarantine = (
-                    df_rejected
-                    .withColumn("_rejected_at", F.current_timestamp())
-                    .withColumn("_batch_id", F.lit(self.batch_id))
-                    .withColumn("_source_table", F.lit(self.source_table))
-                )
-                df_quarantine.write.mode("append").format("parquet").save(self.quarantine_path)
-                self.logger.warning(
-                    f"DLQ Quarantine: Routed {self.rejected_count} bad records to {self.quarantine_path}"
-                )
-        except Exception as e:
-            self.logger.error(f"DLQ Quarantine routing error: {e}")
+            df_quarantine = (
+                df_rejected
+                .withColumn("_rejected_at", F.current_timestamp())
+                .withColumn("_batch_id", F.lit(self.batch_id))
+                .withColumn("_source_table", F.lit(self.source_table))
+            )
+            self.rejected_count = df_quarantine.count()
+            if self.rejected_count == 0:
+                return
+            (
+                df_quarantine.write.mode("overwrite")
+                .option("partitionOverwriteMode", "dynamic")
+                .partitionBy("_batch_id")
+                .format("parquet")
+                .save(self.quarantine_path)
+            )
+            self.logger.warning(
+                f"DLQ Quarantine: Routed {self.rejected_count} bad records to {self.quarantine_path}"
+            )
+        except Exception:
+            self.logger.exception("DLQ Quarantine routing error")
 
     def transform(self, df: DataFrame) -> DataFrame:
         # 1. Type casting & cleansing — subclass responsibility via clean_and_cast()
@@ -130,5 +142,6 @@ class BaseStageJob(BaseSparkJob):
         # 5. Route bad records to DLQ Quarantine Zone
         self.route_quarantine(df_rejected)
 
-        # 6. Add standardized metadata audit columns
-        return self.add_audit_metadata(df_clean)
+        # 6. Return clean records; the base lifecycle (BaseSparkJob.run) attaches
+        #    the standardized audit metadata exactly once.
+        return df_clean

@@ -3,6 +3,7 @@
 import argparse
 import os
 import sys
+
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
@@ -90,7 +91,8 @@ class CuratedObtLoanPortfolio360Job(BaseSparkJob):
                 F.coalesce(dim_cust["flag_own_realty"], F.lit("N")).alias("flag_own_realty"),
                 dim_cust["cnt_children"],
                 dim_cust["cnt_fam_members"],
-                dim_cust["amt_income_total"],
+                # L4 PII: exact income is retained in the core DWH (dim_customer) only;
+                # the self-service OBT exposes the generalized bracket instead.
                 F.coalesce(dim_cust["income_bracket"], F.lit("Unknown")).alias("income_bracket"),
                 F.coalesce(dim_cust["name_income_type"], F.lit("Unknown")).alias("name_income_type"),
                 F.coalesce(dim_cust["name_education_type"], F.lit("Unknown")).alias("name_education_type"),

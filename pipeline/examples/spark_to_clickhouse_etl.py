@@ -3,10 +3,13 @@
 Enterprise End-to-End Data Pipeline:
 HDFS (Raw Data) -> PySpark on YARN (Processing & Enrichment) -> Hive (Data Lakehouse) -> ClickHouse (OLAP Serving)
 """
-import sys
+import os
 import time
+
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, sum as _sum, avg, count, round, to_date
+from pyspark.sql.functions import avg, col, count, round, to_date
+from pyspark.sql.functions import sum as _sum
+
 
 def main():
     print("Starting Enterprise Pipeline: HDFS -> Spark -> Hive -> ClickHouse")
